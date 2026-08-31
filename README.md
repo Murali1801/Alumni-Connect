@@ -50,8 +50,15 @@ cp .env.example .env.local   # then fill in your Supabase keys
 npm run dev
 ```
 
-The app expects the schema in `supabase/migrations/0000_initial_schema.sql`.
-Apply it to a fresh Supabase project before first run.
+Apply the migrations in `supabase/migrations/` to your Supabase project, in
+order, before first run.
+
+`0001_fix_recursive_rls.sql` is not optional. The original admin policies were
+written as `exists (select 1 from users ...)` on the `users` table itself, which
+recurses under RLS and makes any anon read fail with *infinite recursion
+detected in policy for relation "users"*. It replaces them with a
+`security definer` function, and narrows the `alumni_records` grant so the
+contact columns cannot be selected even by a client that tries.
 
 ### Scripts
 
@@ -60,6 +67,22 @@ Apply it to a fresh Supabase project before first run.
 | `node scripts/purge-demo-data.mjs` | Dry-run a wipe of all fabricated rows |
 | `node scripts/purge-demo-data.mjs --commit` | Actually wipe them |
 | `node scripts/bootstrap-connection.mjs` | Put the demo accounts into a usable state |
+| `npm test` | Run the match-scoring tests |
+
+## Getting in
+
+Two doors, deliberately different:
+
+- **Students** register themselves at `/register`. They are not in the college
+  register, so there is nothing to verify them against; the role is fixed to
+  `student` server-side and cannot be set by the caller. Set
+  `STUDENT_EMAIL_DOMAINS` to restrict sign-ups to college addresses.
+- **Alumni** never register. They arrive on a `/claim/<token>` link, confirm the
+  record shown is theirs, and choose a password. That claim is what links an
+  account to the institutional record, and an administrator verifies it after.
+
+Both paths mint the account server-side already confirmed, so neither depends on
+SMTP being configured.
 
 ## Data handling
 
