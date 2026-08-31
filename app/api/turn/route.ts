@@ -49,14 +49,26 @@ function normalise(payload: CloudflareResponse): RTCIceServer[] {
   });
 }
 
+/**
+ * Cloudflare documents two spellings of this call and has shipped both. They
+ * differ only in whether `iceServers` comes back as an object or an array,
+ * which `normalise` already absorbs — so try the current one, then the older
+ * one, and report both failures rather than guessing which account has which.
+ *
+ * A 404 of "cannot find specified key" here almost always means the id is a
+ * Realtime *App* ID rather than a TURN *Key* ID; they are separate resources
+ * in the dashboard and easy to mix up.
+ */
 async function cloudflareIceServers(): Promise<RTCIceServer[]> {
   const keyId = process.env.CLOUDFLARE_TURN_KEY_ID;
   const token = process.env.CLOUDFLARE_TURN_API_TOKEN;
   if (!keyId || !token) return [];
 
-  const res = await fetch(
-    `https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate`,
-    {
+  const base = `https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials`;
+  const failures: string[] = [];
+
+  for (const endpoint of ['generate-ice-servers', 'generate']) {
+    const res = await fetch(`${base}/${endpoint}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -64,17 +76,20 @@ async function cloudflareIceServers(): Promise<RTCIceServer[]> {
       },
       body: JSON.stringify({ ttl: CREDENTIAL_TTL_SECONDS }),
       cache: 'no-store',
-    }
-  );
+    });
 
-  if (!res.ok) {
-    // The body carries Cloudflare's reason; it is worth having in the server
-    // log, because "no relay" is otherwise indistinguishable from "no quota".
+    if (res.ok) {
+      const servers = normalise((await res.json()) as CloudflareResponse);
+      if (servers.length) return servers;
+      failures.push(`${endpoint}: 200 with no usable iceServers`);
+      continue;
+    }
+
     const detail = await res.text().catch(() => '');
-    throw new Error(`Cloudflare TURN responded ${res.status}: ${detail.slice(0, 300)}`);
+    failures.push(`${endpoint}: ${res.status} ${detail.slice(0, 200)}`);
   }
 
-  return normalise((await res.json()) as CloudflareResponse);
+  throw new Error(`Cloudflare TURN refused — ${failures.join(' | ')}`);
 }
 
 /**
