@@ -29,10 +29,20 @@ dormant record can never outrank a live one. The weights are fixed in code
 because each request freezes the score it had when it was sent; changing them
 silently would invalidate that history.
 
-**Video sessions are peer-to-peer.** WebRTC directly between the two browsers,
-with Supabase Realtime used only for signalling. Screen sharing and chat
-included. Nothing is recorded or relayed through a server. A session can only be
-created against an accepted request — that acceptance is the consent record.
+**Video sessions are peer-to-peer.** WebRTC directly between the browsers, in a
+full mesh — one connection per pair — with Supabase Realtime used only for
+signalling. Screen sharing and chat included. Nothing is recorded. Media goes
+browser to browser wherever the two networks allow it, and falls back to a TURN
+relay only when they do not; the relay forwards encrypted packets it cannot
+read. A session can only be created against an accepted request — that
+acceptance is the consent record.
+
+**Rooms have a lobby.** The two scheduled people walk straight in. Anyone else
+who is signed in and holds the link lands in a lobby and waits for the host to
+approve them, so a forwarded link is an invitation rather than a back door.
+Admission is agreed between the participants' browsers over the room channel,
+not enforced by the server: the unguessable room id is the first gate and the
+host's approval is the second.
 
 ## Stack
 
