@@ -25,6 +25,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InitialsAvatar } from '@/components/patterns';
+import { formatFullDateTime, formatTime } from '@/lib/format';
 
 /* ------------------------------------------------------------------ */
 
@@ -605,10 +606,7 @@ export function VideoRoom({
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-sm font-semibold">{title}</h1>
           <p className="truncate text-xs text-neutral-400">
-            {new Date(scheduledAt).toLocaleString(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            })}{' '}
+            {formatFullDateTime(scheduledAt)}{' '}
             · {durationMin} min
           </p>
         </div>
@@ -820,10 +818,7 @@ export function VideoRoom({
                       <div key={m.id} className={cn('flex flex-col', m.from === selfId && 'items-end')}>
                         <span className="mb-1 text-[10px] text-neutral-500">
                           {m.from === selfId ? 'You' : m.name} ·{' '}
-                          {new Date(m.at).toLocaleTimeString(undefined, {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatTime(m.at)}
                         </span>
                         <span
                           className={cn(

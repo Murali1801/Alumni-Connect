@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatNumber } from '@/lib/format';
 
 /** Page window around the current page — always 5 slots where possible. */
 function windowed(page: number, pageCount: number) {
@@ -27,7 +28,7 @@ export function Pagination({
   if (pageCount <= 1) {
     return total > 0 ? (
       <p className="text-center text-xs text-muted-foreground">
-        Showing all {total.toLocaleString()} results
+        Showing all {formatNumber(total)} results
       </p>
     ) : null;
   }
@@ -47,7 +48,7 @@ export function Pagination({
   return (
     <nav className="flex flex-col items-center justify-between gap-3 sm:flex-row" aria-label="Pagination">
       <p className="tnum text-xs text-muted-foreground">
-        Page {page} of {pageCount} · {total.toLocaleString()} results
+        Page {page} of {pageCount} · {formatNumber(total)} results
       </p>
       <div className="flex items-center gap-1">
         <Button

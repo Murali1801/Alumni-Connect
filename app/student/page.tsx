@@ -17,6 +17,7 @@ import {
 } from '@/components/dashboard/cards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatDayMonth, formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Dashboard' };
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,7 @@ export default async function StudentDashboardPage() {
   const people: PersonRow[] = data.requests.slice(0, 5).map((r: any) => ({
     id: r.id,
     name: r.alumni?.full_name ?? 'Alumnus',
-    detail: `${r.type.replace('_', ' ')} · sent ${new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
+    detail: `${r.type.replace('_', ' ')} · sent ${formatDayMonth(r.created_at)}`,
     status: r.status,
     tone:
       r.status === 'accepted'
@@ -71,7 +72,7 @@ export default async function StudentDashboardPage() {
         stats={[
           {
             title: 'Alumni you can reach',
-            value: data.stats.reachable.toLocaleString(),
+            value: formatNumber(data.stats.reachable),
             subtitle: `${data.stats.mentorsAvailable} open to mentoring`,
             href: '/student/directory',
           },
@@ -92,7 +93,7 @@ export default async function StudentDashboardPage() {
             title: 'Upcoming sessions',
             value: data.upcoming.length,
             subtitle: nextSession
-              ? `Next: ${new Date(nextSession.scheduled_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+              ? `Next: ${formatDayMonth(nextSession.scheduled_at)}`
               : 'Nothing scheduled',
             href: '/student/calendar',
           },

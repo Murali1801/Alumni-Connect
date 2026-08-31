@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, EmptyState } from '@/components/patterns';
 import type { OpportunityRow } from '@/lib/queries';
+import { formatDayMonth } from '@/lib/format';
 
 /** Skills the viewer already has, so the card can mark the overlap. */
 export type SkillMatch = { have: Set<string> } | null;
@@ -75,7 +76,7 @@ export function OpportunityList({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="size-3" />
-                    {new Date(o.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    {formatDayMonth(o.created_at)}
                   </span>
                 </p>
               </div>

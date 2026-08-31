@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { GraduationCap, Users, ShieldCheck, Video } from 'lucide-react';
 import { getSessionUser, HOME_FOR } from '@/lib/session';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { Card } from '@/components/ui/card';
 import { LoginForm } from '@/components/auth/login-form';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -20,12 +19,6 @@ export default async function SignInPage() {
   // Anyone already signed in goes straight to their own workspace.
   const user = await getSessionUser();
   if (user) redirect(HOME_FOR[user.role]);
-
-  const db = createAdminClient();
-  const [records, companies] = await Promise.all([
-    db.from('alumni_records').select('*', { count: 'exact', head: true }),
-    db.from('companies').select('*', { count: 'exact', head: true }),
-  ]);
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 sm:px-6">
@@ -55,11 +48,6 @@ export default async function SignInPage() {
                   The alumni network for{' '}
                   <span className="text-gradient">St John College</span>
                 </h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Built on {(records.count ?? 0).toLocaleString()} institutional records and{' '}
-                  {(companies.count ?? 0).toLocaleString()} employers from the college register — not
-                  on self-signup.
-                </p>
               </div>
 
               <ul className="space-y-3">

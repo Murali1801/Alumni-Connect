@@ -17,6 +17,7 @@ import {
 } from '@/components/dashboard/cards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatDayMonth } from '@/lib/format';
 
 export const metadata = { title: 'Dashboard' };
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function AlumniDashboardPage() {
   const inbox: PersonRow[] = data.requests.slice(0, 5).map((r: any) => ({
     id: r.id,
     name: r.student?.full_name ?? 'Student',
-    detail: `${r.type.replace('_', ' ')} · ${new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
+    detail: `${r.type.replace('_', ' ')} · ${formatDayMonth(r.created_at)}`,
     status: r.status,
     tone:
       r.status === 'pending'

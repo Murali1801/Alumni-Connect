@@ -11,6 +11,7 @@ import { ScheduleDialog } from '@/components/calendar/schedule-dialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, StatusPill, SkillTags, EmptyState, Field } from '@/components/patterns';
+import { formatDate } from '@/lib/format';
 
 export const metadata = { title: 'My mentees' };
 export const dynamic = 'force-dynamic';
@@ -160,11 +161,7 @@ export default async function AlumniMenteesPage({ searchParams }: { searchParams
                   </Field>
                   <Field label="Connected since">
                     <span className="text-xs">
-                      {new Date(m.since).toLocaleDateString(undefined, {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatDate(m.since)}
                     </span>
                   </Field>
                   <div className="col-span-2">

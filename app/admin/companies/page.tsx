@@ -9,6 +9,7 @@ import { TableFilters } from '@/components/admin/table-filters';
 import { Pagination } from '@/components/directory/pagination';
 import { RankingChart } from '@/components/analytics/charts';
 import { EmptyState } from '@/components/patterns';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Companies' };
 export const dynamic = 'force-dynamic';
@@ -142,14 +143,14 @@ export default async function AdminCompaniesPage({ searchParams }: { searchParam
     >
       <StatsCards
         stats={[
-          { title: 'Employers on file', value: companies.length.toLocaleString(), subtitle: 'After canonicalisation' },
+          { title: 'Employers on file', value: formatNumber(companies.length), subtitle: 'After canonicalisation' },
           {
             title: 'With alumni today',
-            value: currentCounts.size.toLocaleString(),
+            value: formatNumber(currentCounts.size),
             subtitle: 'At least one claimed profile',
           },
-          { title: 'With a mentor', value: withMentors.toLocaleString(), subtitle: 'Somebody willing to help' },
-          { title: 'Matching filter', value: total.toLocaleString(), subtitle: 'Rows in the table below' },
+          { title: 'With a mentor', value: formatNumber(withMentors), subtitle: 'Somebody willing to help' },
+          { title: 'Matching filter', value: formatNumber(total), subtitle: 'Rows in the table below' },
         ]}
       />
 
@@ -183,7 +184,7 @@ export default async function AdminCompaniesPage({ searchParams }: { searchParam
         columns={columns}
         rows={visible}
         getRowKey={(r) => r.id}
-        caption={`Page ${page} of ${pageCount} · ${total.toLocaleString()} employers match`}
+        caption={`Page ${page} of ${pageCount} · ${formatNumber(total)} employers match`}
         empty={<EmptyState icon={Building2} title="No companies match" description="Try a shorter search term." />}
       />
 

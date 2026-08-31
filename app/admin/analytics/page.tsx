@@ -5,6 +5,7 @@ import { DashboardShell } from '@/components/dashboard/shell';
 import { StatsCards } from '@/components/dashboard/cards';
 import { ClaimRateChart } from '@/components/admin/claim-rate-chart';
 import { TrendChart, MixChart, FunnelCard, RankingChart } from '@/components/analytics/charts';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Analytics' };
 export const dynamic = 'force-dynamic';
@@ -34,11 +35,11 @@ export default async function AdminAnalyticsPage() {
           {
             title: 'Claim rate',
             value: `${data.stats.claimRate}%`,
-            subtitle: `${data.stats.claimedCount.toLocaleString()} of ${data.stats.totalRecords.toLocaleString()} records`,
+            subtitle: `${formatNumber(data.stats.claimedCount)} of ${formatNumber(data.stats.totalRecords)} records`,
           },
           {
             title: 'Verified',
-            value: data.stats.verifiedCount.toLocaleString(),
+            value: formatNumber(data.stats.verifiedCount),
             subtitle: `${data.stats.queue} still in the queue`,
           },
           {

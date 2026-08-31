@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { InitialsAvatar, EmptyState } from '@/components/patterns';
 import { ScheduleDialog } from '@/components/calendar/schedule-dialog';
+import { formatDate, formatDayMonth, formatTime } from '@/lib/format';
 
 export type ThreadView = {
   thread_id: string;
@@ -37,7 +38,7 @@ function dayLabel(iso: string) {
   const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
   if (same(d, today)) return 'Today';
   if (same(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  return formatDate(d);
 }
 
 export function MessagesView({
@@ -175,10 +176,7 @@ export function MessagesView({
                   <span className="truncate text-sm font-medium text-foreground">{t.peer.full_name}</span>
                   {t.lastMessage && (
                     <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {new Date(t.lastMessage.created_at).toLocaleDateString(undefined, {
-                        day: 'numeric',
-                        month: 'short',
-                      })}
+                      {formatDayMonth(t.lastMessage.created_at)}
                     </span>
                   )}
                 </span>
@@ -277,10 +275,7 @@ export function MessagesView({
                             mine ? 'text-right' : 'text-left'
                           )}
                         >
-                          {new Date(m.created_at).toLocaleTimeString(undefined, {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatTime(m.created_at)}
                         </p>
                       </div>
                     </div>

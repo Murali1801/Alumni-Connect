@@ -1,5 +1,6 @@
 import { Database, ShieldCheck } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { formatNumber } from '@/lib/format';
 
 export function SystemStatusCard({
   tables,
@@ -24,7 +25,7 @@ export function SystemStatusCard({
               <p className="truncate text-[11px] text-muted-foreground">{t.note}</p>
             </div>
             <dd className="tnum shrink-0 text-sm font-semibold text-foreground">
-              {t.rows.toLocaleString()}
+              {formatNumber(t.rows)}
             </dd>
           </div>
         ))}

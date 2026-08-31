@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Header } from '@/components/dashboard/header';
+import { HelpBot } from '@/components/chat/help-bot';
 import type { NavBadges } from '@/lib/nav';
 import type { Role } from '@/lib/session';
 
@@ -74,6 +75,8 @@ export function DashboardShell({
         />
         <div className="mt-4 space-y-4 md:mt-5">{children}</div>
       </main>
+
+      <HelpBot role={user.role} />
     </div>
   );
 }
