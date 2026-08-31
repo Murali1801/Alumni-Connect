@@ -112,37 +112,41 @@ Authentication → URL Configuration, or sign-in will fail in production.
 
 ### TURN, for video calls that cross restrictive networks
 
-Video rooms connect the two browsers directly, using public STUN to discover a
-route. That works whenever at least one side is directly reachable. It does not
-work behind symmetric NAT — most mobile data, and plenty of campus and
-corporate wifi — where the media has to be relayed. Those calls sign in fine,
-show both people as present, and then sit on *Connecting…* until they fail.
+Video rooms connect the two browsers directly, using STUN to discover a route.
+That works whenever at least one side is directly reachable. It does not work
+behind symmetric NAT — most mobile data, and plenty of campus and corporate
+wifi — where the media has to be relayed. Those calls sign in fine, show both
+people as present, and then sit on *Connecting…* until they fail.
 
-Set these three to give them a relay:
+A TURN server relays them. The credential for one is a spending key, so it is
+never shipped to the browser: `/api/turn` mints a short-lived one per request,
+for signed-in users only, and the room asks for it before opening a connection.
 
-- `NEXT_PUBLIC_TURN_URL` — comma-separated
-- `NEXT_PUBLIC_TURN_USERNAME`
-- `NEXT_PUBLIC_TURN_CREDENTIAL`
+**Cloudflare (recommended).** Its free allowance is large enough to be a real
+one. Create a TURN key in the Cloudflare dashboard under Realtime → TURN Keys,
+then set:
 
-Any provider works — Metered, Cloudflare Calls, Twilio Network Traversal, or a
-self-hosted coturn. With Metered's free tier: create an app in their dashboard,
-open its ICE servers list, and use every `turn:`/`turns:` URL it gives you as
-one comma-separated string, with the single username and credential shown
-alongside them. Listing several is worth it — port 443 over TCP is what gets
-through the strictest firewalls.
+- `CLOUDFLARE_TURN_KEY_ID`
+- `CLOUDFLARE_TURN_API_TOKEN`
 
-    NEXT_PUBLIC_TURN_URL=turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:80?transport=tcp,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp
+**Static credentials.** Any other provider — Metered, Twilio, self-hosted
+coturn — works through the same route with a fixed credential:
 
-**These are inlined at build time.** Adding them to a host's environment does
-nothing until the next deploy — a redeploy is required, not just a restart. To
-confirm they took, join a room and open **Participants**: the Connection
-readout shows whether a relay is configured, which route types each side
-gathered, and which one the call is actually using. A working relayed call
-reads `via TURN`.
+- `TURN_URL` — comma-separated, e.g.
+  `turn:host:3478,turn:host:3478?transport=tcp,turns:host:5349?transport=tcp`
+- `TURN_USERNAME`
+- `TURN_CREDENTIAL`
 
-They are `NEXT_PUBLIC_` because the browser is what opens the connection, so
-treat the credential as public: scope it to TURN only, and prefer a provider
-that issues short-lived ones.
+Cloudflare wins if both are set. All of these are server-only; the older
+`NEXT_PUBLIC_TURN_*` names are still read as a fallback so a deployment
+mid-migration keeps working, but they compile the credential into the client
+bundle where anyone can lift it, and should be retired.
+
+To confirm a relay is live, join a room and open **Participants**. The
+Connection readout shows whether a relay was issued, which route types each
+side gathered, and which one the call is using. A relayed call reads
+`via TURN`; failures name their own cause, including the ICE error codes —
+401/403 for a bad credential, 701 for a hostname that never resolved.
 
 ## Licence
 
