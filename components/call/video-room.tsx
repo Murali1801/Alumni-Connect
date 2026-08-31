@@ -992,9 +992,11 @@ export function VideoRoom({
                   </p>
                   {slowConnect && (
                     <p className="mx-auto max-w-sm text-xs text-muted-foreground">
-                      {diag?.answered
-                        ? 'Both sides agreed on the call but cannot find a route to each other. This is a network restriction, not a fault in the room — it needs a TURN relay to get through.'
-                        : 'Waiting for the other side to respond. Retrying the connection automatically.'}{' '}
+                      {!diag?.answered
+                        ? 'Waiting for the other side to respond. Retrying automatically.'
+                        : diag.turnConfigured
+                          ? 'Both sides agreed on the call. No route between the two networks yet — still testing the relay.'
+                          : 'Both sides agreed on the call, so the room is working. There is no direct route between these two networks and this deployment has no TURN relay configured, which is the missing piece.'}{' '}
                       Open Participants for the details.
                     </p>
                   )}
