@@ -15,7 +15,6 @@ import {
   Send,
   Copy,
   Loader2,
-  Volume2,
   X,
 } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -29,9 +28,69 @@ import { formatFullDateTime, formatTime } from '@/lib/format';
 
 /* ------------------------------------------------------------------ */
 
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-];
+/**
+ * STUN only helps when at least one side is directly reachable. Mobile data,
+ * campus wifi and corporate networks routinely sit behind symmetric NAT, where
+ * the only way through is a relay — so a TURN server is picked up from the
+ * environment when one is configured. Without it those calls connect the
+ * signalling but never the media.
+ */
+function iceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  ];
+
+  const turn = process.env.NEXT_PUBLIC_TURN_URL;
+  if (turn) {
+    const urls = turn.split(',').map((u) => u.trim()).filter(Boolean);
+    if (urls.length) {
+      servers.push({
+        urls,
+        username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+      });
+    }
+  }
+
+  return servers;
+}
+
+/**
+ * Start remote playback with sound.
+ *
+ * Autoplay policy blocks a video carrying audio until the page has been
+ * interacted with, and a rejected `play()` freezes the picture as well as the
+ * sound. So: try with audio; if the browser refuses, fall back to muted
+ * playback — always permitted, so the video at least appears — and lift the
+ * mute on the very next click or keypress anywhere on the page. Being in a
+ * call means pressing buttons, so this resolves itself without ever having to
+ * ask the user for a gesture.
+ */
+async function playRemote(el: HTMLVideoElement) {
+  el.muted = false;
+  try {
+    await el.play();
+    return;
+  } catch {
+    /* blocked while unmuted — fall through to the muted fallback */
+  }
+
+  el.muted = true;
+  try {
+    await el.play();
+  } catch {
+    /* nothing further is possible until the user interacts */
+  }
+
+  const unmute = () => {
+    document.removeEventListener('pointerdown', unmute);
+    document.removeEventListener('keydown', unmute);
+    el.muted = false;
+    el.play().catch(() => {});
+  };
+  document.addEventListener('pointerdown', unmute);
+  document.addEventListener('keydown', unmute);
+}
 
 type Phase = 'idle' | 'requesting-media' | 'waiting' | 'connecting' | 'connected' | 'ended' | 'error';
 
@@ -83,6 +142,19 @@ export function VideoRoom({
   const politeRef = React.useRef(true);
   const peerIdRef = React.useRef<string | null>(null);
 
+  // Negotiation must not start before the channel is subscribed *and* the
+  // other side is in the room. Realtime broadcast has no history, so an offer
+  // sent into an empty room is simply dropped — and `negotiationneeded` fires
+  // exactly once, when the tracks are added, long before anyone can hear it.
+  // The need is recorded here and replayed when the peer actually shows up.
+  const readyRef = React.useRef(false);
+  const negotiationPendingRef = React.useRef(false);
+  const iceRestartedRef = React.useRef(false);
+
+  // Screen sharing is toggled from a track callback created before the state
+  // update lands, so the flag it reads has to live outside the render.
+  const sharingRef = React.useRef(false);
+
   // ICE candidates can arrive before the remote description is applied.
   // Applying one then throws InvalidStateError, so they are held here and
   // flushed the moment a remote description exists.
@@ -105,13 +177,12 @@ export function VideoRoom({
   const [draft, setDraft] = React.useState('');
   const [elapsed, setElapsed] = React.useState(0);
   const [micLevel, setMicLevel] = React.useState(0);
-  const [remoteAudioBlocked, setRemoteAudioBlocked] = React.useState(false);
   const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([]);
   const [micId, setMicId] = React.useState<string>('');
   const [peerMuted, setPeerMuted] = React.useState(false);
 
   const send = React.useCallback((payload: SignalPayload) => {
-    channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
+    void channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
   }, []);
 
   /* ---------------- media + signalling lifecycle ---------------- */
@@ -163,6 +234,21 @@ export function VideoRoom({
           const ctx = new (window.AudioContext ||
             (window as any).webkitAudioContext)();
           audioCtxRef.current = ctx;
+
+          // A context constructed without a user gesture starts suspended,
+          // which pegs the meter at zero and reads as a dead microphone even
+          // though the track is fine. Resume it, and again on first input.
+          if (ctx.state === 'suspended') {
+            void ctx.resume().catch(() => {});
+            const resume = () => {
+              document.removeEventListener('pointerdown', resume);
+              document.removeEventListener('keydown', resume);
+              void ctx.resume().catch(() => {});
+            };
+            document.addEventListener('pointerdown', resume);
+            document.addEventListener('keydown', resume);
+          }
+
           const analyser = ctx.createAnalyser();
           analyser.fftSize = 512;
           analyser.smoothingTimeConstant = 0.7;
@@ -199,7 +285,15 @@ export function VideoRoom({
         /* enumeration is permission-dependent; ignore */
       }
 
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      // Cancellation can land during device enumeration. Without this guard a
+      // discarded run would still build a second peer connection and take over
+      // the refs the live run is using.
+      if (cancelled) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      const pc = new RTCPeerConnection({ iceServers: iceServers() });
       pcRef.current = pc;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
@@ -220,20 +314,31 @@ export function VideoRoom({
 
         const el = remoteVideo.current;
         if (!el) return;
-        el.srcObject = inbound ?? remote;
-        // Browsers block autoplay with sound until the page has been
-        // interacted with. Detect it and offer a button rather than leaving
-        // the user in silence wondering why.
-        el.play()
-          .then(() => setRemoteAudioBlocked(false))
-          .catch(() => setRemoteAudioBlocked(true));
+        // Always the same aggregate stream: reassigning `srcObject` for every
+        // arriving track restarts playback and drops the audio that just
+        // landed. Tracks added to a live MediaStream are picked up in place.
+        if (el.srcObject !== remote) el.srcObject = remote;
+        void playRemote(el);
       };
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) send({ kind: 'candidate', from: selfId, candidate: candidate.toJSON() });
       };
 
-      pc.onnegotiationneeded = async () => {
+      /**
+       * Create and broadcast an offer — but only once somebody is subscribed
+       * to hear it. `negotiationneeded` fires as soon as the tracks are added,
+       * which is several round trips before the channel is joined and the peer
+       * has arrived, so until then the need is only recorded. The presence
+       * handler replays it at the first moment an offer can be delivered.
+       */
+      const negotiate = async () => {
+        if (cancelled || pc.signalingState === 'closed') return;
+        if (!readyRef.current) {
+          negotiationPendingRef.current = true;
+          return;
+        }
+        negotiationPendingRef.current = false;
         try {
           makingOfferRef.current = true;
           await pc.setLocalDescription();
@@ -247,17 +352,37 @@ export function VideoRoom({
         }
       };
 
+      pc.onnegotiationneeded = () => {
+        void negotiate();
+      };
+
       pc.onconnectionstatechange = () => {
         if (cancelled) return;
         const s = pc.connectionState;
-        if (s === 'connected') setPhase('connected');
-        else if (s === 'connecting') setPhase('connecting');
-        else if (s === 'failed') {
+        if (s === 'connected') {
+          iceRestartedRef.current = false;
+          setPhase('connected');
+        } else if (s === 'connecting') {
+          setPhase('connecting');
+        } else if (s === 'failed') {
+          // A failure is usually a candidate pair going stale — a network
+          // switch, a laptop waking up — rather than a dead route. Gather
+          // again before writing the call off. `restartIce()` raises
+          // `negotiationneeded`, so the replacement offer goes out on its own.
+          if (!iceRestartedRef.current) {
+            iceRestartedRef.current = true;
+            setPhase('connecting');
+            pc.restartIce();
+            return;
+          }
           setPhase('error');
-          setErrorText('The peer connection failed. This usually means a firewall is blocking direct media.');
+          setErrorText(
+            'The media connection failed. This network is blocking direct peer-to-peer traffic, which needs a TURN relay to get through.'
+          );
         } else if (s === 'disconnected') {
-          setPeerPresent(false);
-          setPhase('waiting');
+          // Transient by definition: ICE reconnects itself most of the time.
+          // Say so rather than dropping the peer out of the interface.
+          setPhase((p) => (p === 'error' || p === 'ended' ? p : 'connecting'));
         }
       };
 
@@ -337,31 +462,38 @@ export function VideoRoom({
       channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState<{ id: string }>();
         const others = Object.keys(state).filter((k) => k !== selfId);
-        const peerId = others[0] ?? null;
-        peerIdRef.current = peerId;
-        setPeerPresent(Boolean(peerId));
+        const otherId = others[0] ?? null;
+        const arrived = Boolean(otherId) && peerIdRef.current !== otherId;
+        peerIdRef.current = otherId;
+        setPeerPresent(Boolean(otherId));
 
-        if (peerId) {
-          // Deterministic roles: the lexicographically smaller id is impolite
-          // and drives the initial offer. Both sides derive the same answer.
-          politeRef.current = selfId > peerId;
-          setPhase((p) => (p === 'connected' ? p : 'connecting'));
-          if (!politeRef.current && pc.signalingState === 'stable' && !makingOfferRef.current) {
-            pc.onnegotiationneeded?.(new Event('negotiationneeded'));
-          }
-        } else {
-          setPhase((p) => (p === 'error' ? p : 'waiting'));
+        if (!otherId) {
+          readyRef.current = false;
+          setPhase((p) => (p === 'error' || p === 'ended' ? p : 'waiting'));
+          return;
         }
+
+        // Deterministic roles: the lexicographically smaller id is impolite
+        // and wins an offer collision. Both sides derive the same answer.
+        politeRef.current = selfId > otherId;
+        readyRef.current = true;
+        setPhase((p) => (p === 'connected' ? p : 'connecting'));
+
+        // This is the first instant an offer can actually reach anyone, so it
+        // is where the held-back negotiation runs. Both sides offer; the
+        // collision is settled by politeness in the description handler.
+        if (arrived && !makingOfferRef.current) void negotiate();
       });
 
-      await channel.subscribe(async (status) => {
+      channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({ id: selfId, name: selfName });
           if (!cancelled) setPhase((p) => (p === 'requesting-media' ? 'waiting' : p));
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          readyRef.current = false;
           if (!cancelled) {
             setPhase('error');
-            setErrorText('Lost the signalling connection. Check your network and reload.');
+            setErrorText('Lost the signalling connection. Check your network and reload this page.');
           }
         }
       });
@@ -371,21 +503,32 @@ export function VideoRoom({
 
     return () => {
       cancelled = true;
-      try {
-        channelRef.current?.send({
-          type: 'broadcast',
-          event: 'signal',
-          payload: { kind: 'bye', from: selfId },
-        });
-      } catch {
-        /* channel may already be closed */
+      readyRef.current = false;
+      negotiationPendingRef.current = false;
+
+      // Let the goodbye reach the socket before the channel is torn down,
+      // otherwise the peer waits out a presence timeout to notice.
+      const channel = channelRef.current;
+      channelRef.current = null;
+      if (channel) {
+        Promise.resolve(
+          channel.send({ type: 'broadcast', event: 'signal', payload: { kind: 'bye', from: selfId } })
+        )
+          .catch(() => {})
+          .finally(() => void channel.unsubscribe());
       }
-      channelRef.current?.unsubscribe();
+
       pcRef.current?.close();
+      pcRef.current = null;
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
       screenTrackRef.current?.stop();
+      screenTrackRef.current = null;
+      sharingRef.current = false;
       if (levelRafRef.current !== null) cancelAnimationFrame(levelRafRef.current);
+      levelRafRef.current = null;
       audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
       pendingCandidatesRef.current = [];
     };
   }, [roomId, selfId, selfName, peerName, send]);
@@ -402,15 +545,20 @@ export function VideoRoom({
         if (!res.ok) return;
         const history = await res.json();
         if (cancelled || !Array.isArray(history)) return;
-        setMessages(
-          history.map((m: any) => ({
-            id: m.id,
-            from: m.from_id,
-            name: m.from_id === selfId ? selfName : peerName,
-            text: m.body,
-            at: new Date(m.created_at).getTime(),
-          }))
-        );
+        const loaded: ChatMessage[] = history.map((m: any) => ({
+          id: m.id,
+          from: m.from_id,
+          name: m.from_id === selfId ? selfName : peerName,
+          text: m.body,
+          at: new Date(m.created_at).getTime(),
+        }));
+        // Lines sent or received over the room channel while this request was
+        // in flight are not in the response — keep them rather than replacing
+        // the list wholesale.
+        setMessages((live) => {
+          const known = new Set(loaded.map((m) => m.id));
+          return [...loaded, ...live.filter((m) => !known.has(m.id))].sort((a, b) => a.at - b.at);
+        });
       } catch {
         // A chat that will not load must not take the call down with it.
       }
@@ -473,16 +621,6 @@ export function VideoRoom({
     }
   }
 
-  /** Autoplay-with-sound needs a gesture in most browsers; this is that gesture. */
-  function enableRemoteAudio() {
-    const el = remoteVideo.current;
-    if (!el) return;
-    el.muted = false;
-    el.play()
-      .then(() => setRemoteAudioBlocked(false))
-      .catch(() => toast.error('The browser is still blocking audio playback.'));
-  }
-
   function toggleCam() {
     const track = cameraTrackRef.current;
     if (!track) return;
@@ -494,13 +632,20 @@ export function VideoRoom({
     const pc = pcRef.current;
     if (!pc) return;
     const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-    if (!sender) return;
+    if (!sender) {
+      toast.error('This call has no video track to share over.');
+      return;
+    }
 
-    if (sharing) {
+    // Read the ref, not `sharing`: the track's own `onended` handler is built
+    // while the share is starting, so it closes over `sharing === false` for
+    // good and would re-open the picker instead of restoring the camera.
+    if (sharingRef.current) {
       screenTrackRef.current?.stop();
       screenTrackRef.current = null;
       if (cameraTrackRef.current) await sender.replaceTrack(cameraTrackRef.current);
       if (localVideo.current) localVideo.current.srcObject = localStreamRef.current;
+      sharingRef.current = false;
       setSharing(false);
       return;
     }
@@ -515,6 +660,7 @@ export function VideoRoom({
       };
       await sender.replaceTrack(track);
       if (localVideo.current) localVideo.current.srcObject = display;
+      sharingRef.current = true;
       setSharing(true);
     } catch {
       // The user dismissed the picker — nothing to report.
@@ -557,9 +703,26 @@ export function VideoRoom({
 
   function hangUp() {
     send({ kind: 'bye', from: selfId });
+
+    // The component stays mounted on the "call ended" screen, so the effect
+    // cleanup will not run — everything the call holds open is released here
+    // instead: socket, peer connection, camera, microphone, analyser.
+    const channel = channelRef.current;
+    channelRef.current = null;
+    if (channel) setTimeout(() => void channel.unsubscribe(), 200);
+
     pcRef.current?.close();
+    pcRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
     screenTrackRef.current?.stop();
+    screenTrackRef.current = null;
+    sharingRef.current = false;
+    if (levelRafRef.current !== null) cancelAnimationFrame(levelRafRef.current);
+    levelRafRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    readyRef.current = false;
     setPhase('ended');
   }
 
@@ -600,12 +763,12 @@ export function VideoRoom({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
       {/* Top bar */}
-      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-sm font-semibold">{title}</h1>
-          <p className="truncate text-xs text-neutral-400">
+          <p className="truncate text-xs text-muted-foreground">
             {formatFullDateTime(scheduledAt)}{' '}
             · {durationMin} min
           </p>
@@ -614,10 +777,10 @@ export function VideoRoom({
           className={cn(
             'hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:inline-flex',
             phase === 'connected'
-              ? 'bg-emerald-500/15 text-emerald-400'
+              ? 'bg-success/15 text-success'
               : phase === 'error'
-                ? 'bg-red-500/15 text-red-400'
-                : 'bg-white/10 text-neutral-300'
+                ? 'bg-destructive/15 text-destructive'
+                : 'bg-muted text-muted-foreground'
           )}
         >
           {phase === 'connecting' || phase === 'requesting-media' ? (
@@ -627,12 +790,7 @@ export function VideoRoom({
           )}
           {statusLabel[phase]}
         </span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={copyLink}
-          className="text-neutral-300 hover:bg-white/10 hover:text-white"
-        >
+        <Button size="sm" variant="ghost" onClick={copyLink}>
           <Copy className="size-3.5" />
           <span className="hidden sm:inline">Copy link</span>
         </Button>
@@ -642,7 +800,7 @@ export function VideoRoom({
       <div className="flex min-h-0 flex-1">
         <div className="relative flex min-w-0 flex-1 items-center justify-center p-3 sm:p-4">
           {/* Remote */}
-          <div className="relative h-full w-full overflow-hidden rounded-xl bg-neutral-900 ring-1 ring-white/10">
+          <div className="relative h-full w-full overflow-hidden rounded-xl bg-muted ring-1 ring-border">
             <video
               ref={remoteVideo}
               autoPlay
@@ -654,7 +812,7 @@ export function VideoRoom({
                 <InitialsAvatar name={peerName} size="xl" />
                 <div>
                   <p className="text-sm font-medium">{peerName}</p>
-                  <p className="mt-1 text-xs text-neutral-400">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {phase === 'error' ? errorText : `Waiting for ${peerName} to join…`}
                   </p>
                 </div>
@@ -667,32 +825,22 @@ export function VideoRoom({
               </div>
             )}
             {peerPresent && (
-              <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs font-medium backdrop-blur">
+              <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur">
                 {peerName}
-                {peerMuted && <MicOff className="size-3 text-red-400" />}
+                {peerMuted && <MicOff className="size-3 text-red-300" />}
               </span>
-            )}
-
-            {remoteAudioBlocked && peerPresent && (
-              <button
-                onClick={enableRemoteAudio}
-                className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-black shadow-lg"
-              >
-                <Volume2 className="size-3.5" />
-                Click to enable sound
-              </button>
             )}
           </div>
 
           {/* Local picture-in-picture */}
-          <div className="absolute bottom-6 right-6 w-32 overflow-hidden rounded-lg bg-neutral-800 ring-1 ring-white/20 sm:w-44 md:w-56">
+          <div className="absolute bottom-6 right-6 w-32 overflow-hidden rounded-lg bg-muted ring-1 ring-border sm:w-44 md:w-56">
             <video ref={localVideo} autoPlay playsInline muted className="aspect-video w-full object-cover" />
             {!camOn && (
-              <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                <VideoOff className="size-5 text-neutral-500" />
+              <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                <VideoOff className="size-5 text-muted-foreground" />
               </div>
             )}
-            <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium">
+            <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
               You{sharing ? ' · sharing' : ''}
               {micOn ? (
                 // Live input level — proof the microphone is actually hearing you.
@@ -702,14 +850,14 @@ export function VideoRoom({
                       key={i}
                       className={cn(
                         'w-0.5 rounded-sm transition-all',
-                        micLevel > threshold ? 'bg-emerald-400' : 'bg-white/25'
+                        micLevel > threshold ? 'bg-success' : 'bg-white/30'
                       )}
                       style={{ height: `${4 + i * 3}px` }}
                     />
                   ))}
                 </span>
               ) : (
-                <MicOff className="size-2.5 text-red-400" />
+                <MicOff className="size-2.5 text-red-300" />
               )}
             </span>
           </div>
@@ -717,16 +865,10 @@ export function VideoRoom({
 
         {/* Side panel */}
         {panel && (
-          <aside className="flex w-full max-w-xs shrink-0 flex-col border-l border-white/10 bg-neutral-900 md:w-80">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <aside className="flex w-full max-w-xs shrink-0 flex-col border-l border-border bg-card md:w-80">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold">{panel === 'chat' ? 'Chat' : 'Participants'}</h2>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                onClick={() => setPanel(null)}
-                aria-label="Close panel"
-                className="text-neutral-400 hover:bg-white/10 hover:text-white"
-              >
+              <Button size="icon-xs" variant="ghost" onClick={() => setPanel(null)} aria-label="Close panel">
                 <X className="size-3.5" />
               </Button>
             </div>
@@ -736,33 +878,33 @@ export function VideoRoom({
                 <li className="flex items-center gap-2.5 rounded-lg px-2 py-2">
                   <InitialsAvatar name={selfName} size="sm" />
                   <span className="min-w-0 flex-1 truncate text-sm">{selfName}</span>
-                  <span className="text-xs text-neutral-400">You</span>
+                  <span className="text-xs text-muted-foreground">You</span>
                 </li>
                 <li className="flex items-center gap-2.5 rounded-lg px-2 py-2">
                   <InitialsAvatar name={peerName} size="sm" />
                   <span className="min-w-0 flex-1 truncate text-sm">{peerName}</span>
-                  <span className={cn('text-xs', peerPresent ? 'text-emerald-400' : 'text-neutral-500')}>
+                  <span className={cn('text-xs', peerPresent ? 'text-success' : 'text-muted-foreground')}>
                     {peerPresent ? (peerMuted ? 'Muted' : 'In room') : 'Not joined'}
                   </span>
                 </li>
 
                 {/* Audio troubleshooting lives with the participants, which is
                     where people look when they cannot be heard. */}
-                <li className="mt-4 space-y-3 border-t border-white/10 px-2 pt-4">
+                <li className="mt-4 space-y-3 border-t border-border px-2 pt-4">
                   <div className="space-y-1.5">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       Your microphone
                     </span>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                       <div
                         className={cn(
                           'h-full rounded-full transition-[width] duration-75',
-                          micOn ? 'bg-emerald-400' : 'bg-red-500'
+                          micOn ? 'bg-success' : 'bg-destructive'
                         )}
                         style={{ width: `${micOn ? Math.max(2, micLevel * 100) : 100}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-neutral-500">
+                    <p className="text-[11px] text-muted-foreground">
                       {!micOn
                         ? 'Muted — the bar shows nothing is being sent.'
                         : micLevel > 0.05
@@ -773,30 +915,21 @@ export function VideoRoom({
 
                   {devices.length > 1 && (
                     <label className="block space-y-1.5">
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                         Input device
                       </span>
                       <select
                         value={micId}
                         onChange={(e) => switchMic(e.target.value)}
-                        className="w-full rounded-md border border-white/15 bg-white/5 px-2 py-1.5 text-xs text-neutral-100 outline-none focus-visible:border-white/40"
+                        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
                       >
                         {devices.map((d, i) => (
-                          <option key={d.deviceId} value={d.deviceId} className="bg-neutral-900">
+                          <option key={d.deviceId} value={d.deviceId}>
                             {d.label || `Microphone ${i + 1}`}
                           </option>
                         ))}
                       </select>
                     </label>
-                  )}
-
-                  {remoteAudioBlocked && (
-                    <button
-                      onClick={enableRemoteAudio}
-                      className="w-full rounded-md bg-amber-500 px-2 py-1.5 text-xs font-semibold text-black"
-                    >
-                      Enable incoming sound
-                    </button>
                   )}
                 </li>
               </ul>
@@ -804,26 +937,26 @@ export function VideoRoom({
               <>
                 <div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto p-3">
                   {agenda && (
-                    <div className="rounded-lg bg-white/5 p-3 text-xs leading-relaxed text-neutral-300">
-                      <span className="font-medium text-neutral-100">Agenda: </span>
+                    <div className="rounded-lg bg-muted p-3 text-xs leading-relaxed text-muted-foreground">
+                      <span className="font-medium text-foreground">Agenda: </span>
                       {agenda}
                     </div>
                   )}
                   {messages.length === 0 ? (
-                    <p className="px-1 py-6 text-center text-xs text-neutral-500">
+                    <p className="px-1 py-6 text-center text-xs text-muted-foreground">
                       No messages yet. Anything sent here is saved to your Messages thread.
                     </p>
                   ) : (
                     messages.map((m) => (
                       <div key={m.id} className={cn('flex flex-col', m.from === selfId && 'items-end')}>
-                        <span className="mb-1 text-[10px] text-neutral-500">
+                        <span className="mb-1 text-[10px] text-muted-foreground">
                           {m.from === selfId ? 'You' : m.name} ·{' '}
                           {formatTime(m.at)}
                         </span>
                         <span
                           className={cn(
                             'max-w-[85%] rounded-lg px-2.5 py-1.5 text-sm',
-                            m.from === selfId ? 'bg-primary text-primary-foreground' : 'bg-white/10'
+                            m.from === selfId ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
                           )}
                         >
                           {m.text}
@@ -832,13 +965,13 @@ export function VideoRoom({
                     ))
                   )}
                 </div>
-                <form onSubmit={sendChat} className="flex gap-2 border-t border-white/10 p-3">
+                <form onSubmit={sendChat} className="flex gap-2 border-t border-border p-3">
                   <Input
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="Message"
                     aria-label="Chat message"
-                    className="h-9 border-white/15 bg-white/5 text-sm text-white placeholder:text-neutral-500"
+                    className="h-9 text-sm"
                   />
                   <Button type="submit" size="icon" aria-label="Send" disabled={!draft.trim()}>
                     <Send className="size-4" />
@@ -851,15 +984,23 @@ export function VideoRoom({
       </div>
 
       {/* Controls */}
-      <footer className="flex items-center justify-center gap-2 border-t border-white/10 px-4 py-3">
-        <ControlButton active={micOn} onClick={toggleMic} label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
+      <footer className="flex items-center justify-center gap-2 border-t border-border px-4 py-3">
+        <ControlButton
+          tone={micOn ? 'idle' : 'off'}
+          onClick={toggleMic}
+          label={micOn ? 'Mute microphone' : 'Unmute microphone'}
+        >
           {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
         </ControlButton>
-        <ControlButton active={camOn} onClick={toggleCam} label={camOn ? 'Turn camera off' : 'Turn camera on'}>
+        <ControlButton
+          tone={camOn ? 'idle' : 'off'}
+          onClick={toggleCam}
+          label={camOn ? 'Turn camera off' : 'Turn camera on'}
+        >
           {camOn ? <VideoIcon className="size-4" /> : <VideoOff className="size-4" />}
         </ControlButton>
         <ControlButton
-          active={!sharing}
+          tone={sharing ? 'on' : 'idle'}
           onClick={toggleShare}
           label={sharing ? 'Stop sharing screen' : 'Share screen'}
           className="hidden sm:inline-flex"
@@ -867,14 +1008,14 @@ export function VideoRoom({
           {sharing ? <MonitorX className="size-4" /> : <MonitorUp className="size-4" />}
         </ControlButton>
         <ControlButton
-          active={panel !== 'chat'}
+          tone={panel === 'chat' ? 'on' : 'idle'}
           onClick={() => setPanel((p) => (p === 'chat' ? null : 'chat'))}
           label="Toggle chat"
         >
           <MessageSquare className="size-4" />
         </ControlButton>
         <ControlButton
-          active={panel !== 'people'}
+          tone={panel === 'people' ? 'on' : 'idle'}
           onClick={() => setPanel((p) => (p === 'people' ? null : 'people'))}
           label="Toggle participants"
         >
@@ -884,7 +1025,7 @@ export function VideoRoom({
         <button
           onClick={hangUp}
           aria-label="Leave call"
-          className="ml-2 inline-flex h-10 items-center gap-2 rounded-full bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-500"
+          className="ml-2 inline-flex h-10 items-center gap-2 rounded-full bg-destructive px-5 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
         >
           <PhoneOff className="size-4" />
           <span className="hidden sm:inline">Leave</span>
@@ -894,15 +1035,23 @@ export function VideoRoom({
   );
 }
 
+/**
+ * Three tones, so colour carries meaning rather than just state:
+ *   idle — available          (neutral)
+ *   on   — engaged right now  (brand blue: sharing, a panel is open)
+ *   off  — your input is cut  (red: microphone or camera muted)
+ *
+ * An open chat panel is not a problem, so it must not be red.
+ */
 function ControlButton({
   children,
-  active,
+  tone,
   onClick,
   label,
   className,
 }: {
   children: React.ReactNode;
-  active: boolean;
+  tone: 'idle' | 'on' | 'off';
   onClick: () => void;
   label: string;
   className?: string;
@@ -912,9 +1061,12 @@ function ControlButton({
       onClick={onClick}
       aria-label={label}
       title={label}
+      aria-pressed={tone !== 'idle'}
       className={cn(
         'inline-flex size-10 items-center justify-center rounded-full transition-colors',
-        active ? 'bg-white/10 text-neutral-100 hover:bg-white/20' : 'bg-red-600/90 text-white hover:bg-red-500',
+        tone === 'off' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        tone === 'on' && 'bg-primary text-primary-foreground hover:bg-primary/90',
+        tone === 'idle' && 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         className
       )}
     >

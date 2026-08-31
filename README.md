@@ -110,6 +110,27 @@ host:
 Add the deployed origin to Supabase's allowed redirect URLs under
 Authentication → URL Configuration, or sign-in will fail in production.
 
+### TURN, for video calls that cross restrictive networks
+
+Video rooms connect the two browsers directly, using public STUN to discover a
+route. That works whenever at least one side is directly reachable. It does not
+work behind symmetric NAT — most mobile data, and plenty of campus and
+corporate wifi — where the media has to be relayed. Those calls sign in fine,
+show both people as present, and then sit on *Connecting…* until they fail.
+
+Set these to give them a relay (optional, but the difference between a call that
+works everywhere and one that works on some networks):
+
+- `NEXT_PUBLIC_TURN_URL` — comma-separated, e.g.
+  `turn:host:3478?transport=udp,turns:host:5349?transport=tcp`
+- `NEXT_PUBLIC_TURN_USERNAME`
+- `NEXT_PUBLIC_TURN_CREDENTIAL`
+
+Any provider works — Cloudflare Calls, Twilio Network Traversal, Metered, or a
+self-hosted coturn. These are `NEXT_PUBLIC_` because the browser is what opens
+the connection; scope the credential to TURN only, and prefer a provider that
+issues short-lived ones.
+
 ## Licence
 
 Coursework project for St John College of Engineering and Management.
