@@ -2,7 +2,16 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /** Paths reachable without a session. */
-const PUBLIC_PREFIXES = ['/login', '/claim', '/api/claim', '/api/auth', '/logout', '/auth/route'];
+const PUBLIC_PREFIXES = [
+  '/login',
+  '/register',
+  '/api/register',
+  '/claim',
+  '/api/claim',
+  '/api/auth',
+  '/logout',
+  '/auth/route',
+];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

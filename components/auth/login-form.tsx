@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, GraduationCap, Users, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
@@ -123,9 +124,18 @@ export function LoginForm() {
         ))}
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        Alumni: use the claim link sent to your registered email to create an account.
-      </p>
+      <div className="space-y-2 border-t border-border pt-5 text-center">
+        <p className="text-sm text-muted-foreground">
+          New student?{' '}
+          <Link href="/register" className="font-medium text-primary hover:underline">
+            Create an account
+          </Link>
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Alumni do not register — use the claim link sent to your registered email. That is what
+          links you to your record in the college register.
+        </p>
+      </div>
     </div>
   );
 }
