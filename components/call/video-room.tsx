@@ -35,21 +35,26 @@ import { formatFullDateTime, formatTime } from '@/lib/format';
  * environment when one is configured. Without it those calls connect the
  * signalling but never the media.
  */
+function turnUrls(): string[] {
+  // Read as a whole literal: Next inlines NEXT_PUBLIC_* at build time, so this
+  // is baked into the bundle. Changing it on the host requires a redeploy —
+  // which is why the room reports whether a relay is configured at all.
+  const turn = process.env.NEXT_PUBLIC_TURN_URL;
+  return turn ? turn.split(',').map((u) => u.trim()).filter(Boolean) : [];
+}
+
 function iceServers(): RTCIceServer[] {
   const servers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   ];
 
-  const turn = process.env.NEXT_PUBLIC_TURN_URL;
-  if (turn) {
-    const urls = turn.split(',').map((u) => u.trim()).filter(Boolean);
-    if (urls.length) {
-      servers.push({
-        urls,
-        username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-        credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-      });
-    }
+  const urls = turnUrls();
+  if (urls.length) {
+    servers.push({
+      urls,
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
+    });
   }
 
   return servers;
@@ -112,6 +117,7 @@ type Diagnostics = {
   localTypes: string[];
   remoteTypes: string[];
   route: string | null;
+  turnConfigured: boolean;
 };
 
 type StatsEntry = {
@@ -716,6 +722,7 @@ export function VideoRoom({
         localTypes: [...local],
         remoteTypes: [...remote],
         route,
+        turnConfigured: turnUrls().length > 0,
       });
     };
 
@@ -1126,16 +1133,21 @@ export function VideoRoom({
                       <Row label="Your routes" value={describeTypes(diag.localTypes)} />
                       <Row label="Their routes" value={describeTypes(diag.remoteTypes)} />
                       <Row label="In use" value={diag.route ?? 'none'} />
+                      <Row label="Relay" value={diag.turnConfigured ? 'configured' : 'not configured'} />
                     </dl>
-                    {diag.connection !== 'connected' &&
-                      diag.answered &&
-                      !diag.localTypes.includes('relay') && (
-                        <p className="text-[11px] leading-relaxed text-muted-foreground">
-                          No relay route is available. On a network that blocks direct
-                          peer-to-peer traffic the call cannot connect without a TURN
-                          server configured.
-                        </p>
-                      )}
+
+                    {/* Three different problems that all look like "stuck". */}
+                    {diag.connection !== 'connected' && diag.answered && (
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {!diag.turnConfigured
+                          ? 'Both sides agreed on the call, but no TURN relay is configured. If either network blocks direct peer-to-peer traffic there is no route to find.'
+                          : diag.localTypes.includes('relay')
+                            ? 'A relay route was obtained and is still being tested. If this does not clear, the other side may be the one without a route.'
+                            : diag.gathering === 'complete'
+                              ? 'A relay is configured but produced no route. The TURN URL or credentials are most likely wrong — or the build predates them, since these are baked in at build time and need a redeploy.'
+                              : 'Still gathering routes…'}
+                      </p>
+                    )}
                   </li>
                 )}
               </ul>
