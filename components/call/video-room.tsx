@@ -35,29 +35,32 @@ import { formatFullDateTime, formatTime } from '@/lib/format';
  * environment when one is configured. Without it those calls connect the
  * signalling but never the media.
  */
-function turnUrls(): string[] {
-  // Read as a whole literal: Next inlines NEXT_PUBLIC_* at build time, so this
-  // is baked into the bundle. Changing it on the host requires a redeploy —
-  // which is why the room reports whether a relay is configured at all.
-  const turn = process.env.NEXT_PUBLIC_TURN_URL;
-  return turn ? turn.split(',').map((u) => u.trim()).filter(Boolean) : [];
-}
+const FALLBACK_STUN: RTCIceServer = {
+  urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
+};
 
-function iceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ];
-
-  const urls = turnUrls();
-  if (urls.length) {
-    servers.push({
-      urls,
-      username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-    });
+/**
+ * Ask the server for the call's ICE servers.
+ *
+ * The TURN credential is a spending key, so it is minted per request with a
+ * short life rather than compiled into this bundle. `/api/turn` is the only
+ * place it exists, and it answers with STUN alone when no relay is configured
+ * — a room that cannot relay still has to load.
+ */
+async function resolveIceServers(): Promise<{ servers: RTCIceServer[]; relay: boolean }> {
+  try {
+    const res = await fetch('/api/turn', { cache: 'no-store' });
+    if (res.ok) {
+      const body = (await res.json()) as { iceServers?: RTCIceServer[]; relay?: boolean };
+      if (Array.isArray(body.iceServers) && body.iceServers.length) {
+        return { servers: body.iceServers, relay: Boolean(body.relay) };
+      }
+    }
+  } catch {
+    // Offline, or the route is down. STUN alone still connects the majority of
+    // calls, so this must never stop the room from opening.
   }
-
-  return servers;
+  return { servers: [FALLBACK_STUN], relay: false };
 }
 
 /**
@@ -208,6 +211,11 @@ export function VideoRoom({
   // wrong, 701 means the hostname never resolved — the difference between a
   // typo in the password and a typo in the URL, and otherwise invisible.
   const iceErrorsRef = React.useRef<string[]>([]);
+
+  // Whether the servers this call was actually given include a relay. Read
+  // from the response rather than an env var, so it reflects what the browser
+  // has rather than what the build thought it had.
+  const relayReadyRef = React.useRef(false);
   const answeredRef = React.useRef(false);
   const offerSentRef = React.useRef(false);
   const recoveryAttemptsRef = React.useRef(0);
@@ -356,7 +364,14 @@ export function VideoRoom({
         return;
       }
 
-      const pc = new RTCPeerConnection({ iceServers: iceServers() });
+      const { servers, relay } = await resolveIceServers();
+      if (cancelled) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      relayReadyRef.current = relay;
+
+      const pc = new RTCPeerConnection({ iceServers: servers });
       pcRef.current = pc;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
@@ -738,7 +753,7 @@ export function VideoRoom({
         localTypes: [...local],
         remoteTypes: [...remote],
         route,
-        turnConfigured: turnUrls().length > 0,
+        turnConfigured: relayReadyRef.current,
         iceErrors: iceErrorsRef.current,
       });
     };
