@@ -118,6 +118,7 @@ type Diagnostics = {
   remoteTypes: string[];
   route: string | null;
   turnConfigured: boolean;
+  iceErrors: string[];
 };
 
 type StatsEntry = {
@@ -202,6 +203,11 @@ export function VideoRoom({
   // one is lost the call waits forever, so the watchdog below re-offers — and
   // it needs to reach the negotiate() that lives inside the lifecycle effect.
   const negotiateRef = React.useRef<(() => Promise<void>) | null>(null);
+
+  // Why a STUN or TURN server produced nothing. 401 means the credentials are
+  // wrong, 701 means the hostname never resolved — the difference between a
+  // typo in the password and a typo in the URL, and otherwise invisible.
+  const iceErrorsRef = React.useRef<string[]>([]);
   const answeredRef = React.useRef(false);
   const offerSentRef = React.useRef(false);
   const recoveryAttemptsRef = React.useRef(0);
@@ -249,6 +255,7 @@ export function VideoRoom({
       answeredRef.current = false;
       offerSentRef.current = false;
       recoveryAttemptsRef.current = 0;
+      iceErrorsRef.current = [];
 
       let stream: MediaStream;
       try {
@@ -379,6 +386,15 @@ export function VideoRoom({
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) send({ kind: 'candidate', from: selfId, candidate: candidate.toJSON() });
+      };
+
+      pc.onicecandidateerror = (event) => {
+        const e = event as RTCPeerConnectionIceErrorEvent;
+        // Servers are tried repeatedly; only the distinct failures are useful.
+        const line = `${e.errorCode} ${e.errorText || ''} — ${e.url ?? 'unknown'}`.trim();
+        if (!iceErrorsRef.current.includes(line)) {
+          iceErrorsRef.current = [...iceErrorsRef.current, line].slice(-6);
+        }
       };
 
       /**
@@ -723,6 +739,7 @@ export function VideoRoom({
         remoteTypes: [...remote],
         route,
         turnConfigured: turnUrls().length > 0,
+        iceErrors: iceErrorsRef.current,
       });
     };
 
@@ -1136,7 +1153,27 @@ export function VideoRoom({
                       <Row label="Their routes" value={describeTypes(diag.remoteTypes)} />
                       <Row label="In use" value={diag.route ?? 'none'} />
                       <Row label="Relay" value={diag.turnConfigured ? 'configured' : 'not configured'} />
+                      <Row label="Gathering" value={diag.gathering} />
                     </dl>
+
+                    {diag.iceErrors.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Server errors
+                        </span>
+                        <ul className="space-y-1">
+                          {diag.iceErrors.map((e) => (
+                            <li key={e} className="break-all font-mono text-[10px] text-muted-foreground">
+                              {e}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          401 or 403 on a <code>turn:</code> URL means the username or credential
+                          is wrong. 701 means that hostname never resolved.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Three different problems that all look like "stuck". */}
                     {diag.connection !== 'connected' && diag.answered && (
