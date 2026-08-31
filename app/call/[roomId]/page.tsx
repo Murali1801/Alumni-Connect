@@ -20,19 +20,10 @@ export default async function CallPage({ params }: { params: Promise<{ roomId: s
   const call = await getCall(roomId);
   if (!call) notFound();
 
-  const isHost = call.host_id === user.id;
-  const isGuest = call.guest_id === user.id;
-
-  if (!isHost && !isGuest) {
-    return (
-      <Blocked
-        title="You are not in this session"
-        body="Video rooms are private to the two people scheduled on them."
-        href={`/${user.role}/calls`}
-      />
-    );
-  }
-
+  // Anyone signed in who holds the link may reach this page, but only the two
+  // scheduled people walk straight in. Everybody else lands in the lobby and
+  // waits for the host to approve them — the room id is unguessable, so the
+  // link is the first gate and this approval is the second.
   if (call.status === 'cancelled') {
     return (
       <Blocked
@@ -49,8 +40,10 @@ export default async function CallPage({ params }: { params: Promise<{ roomId: s
       title={call.title}
       selfId={user.id}
       selfName={user.full_name}
-      peerId={isHost ? call.guest_id : call.host_id}
-      peerName={isHost ? call.guest_name : call.host_name}
+      hostId={call.host_id}
+      hostName={call.host_name}
+      guestId={call.guest_id}
+      guestName={call.guest_name}
       backHref={`/${user.role}/calendar`}
       scheduledAt={call.scheduled_at}
       durationMin={call.duration_min}
