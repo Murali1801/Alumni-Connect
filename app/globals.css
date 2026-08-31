@@ -4,8 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@plugin "tailwindcss-animate";
-
 /* ============================================================
    SJCEM Alumni Network — design tokens
    Blue-violet console palette (compact light theme, true-black
