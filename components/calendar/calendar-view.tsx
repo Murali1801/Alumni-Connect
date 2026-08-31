@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, EmptyState } from '@/components/patterns';
+import { formatDateTime, formatDayMonth, formatMonthYear, formatTime } from '@/lib/format';
 
 export type SessionView = {
   room_id: string;
@@ -109,7 +110,7 @@ export function CalendarView({
       <Card className="gap-0 p-5 lg:col-span-2">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-foreground">
-            {month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+            {formatMonthYear(month)}
           </h2>
           <div className="flex items-center gap-1">
             <Button
@@ -197,7 +198,7 @@ export function CalendarView({
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-foreground">
               {selected
-                ? selected.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })
+                ? formatDayMonth(selected)
                 : 'Upcoming'}
             </h2>
             {selected && (
@@ -238,10 +239,7 @@ export function CalendarView({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-foreground">{s.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(s.scheduled_at).toLocaleDateString(undefined, {
-                        day: 'numeric',
-                        month: 'short',
-                      })}{' '}
+                      {formatDayMonth(s.scheduled_at)}{' '}
                       · {s.status}
                     </p>
                   </div>
@@ -284,15 +282,9 @@ function SessionRow({
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">
-        {start.toLocaleString(undefined, {
-          weekday: 'short',
-          day: 'numeric',
-          month: 'short',
-          hour: '2-digit',
-          minute: '2-digit',
-        })}{' '}
+        {formatDateTime(start)}{' '}
         –{' '}
-        {end.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} ·{' '}
+        {formatTime(end)} ·{' '}
         {session.duration_min} min
       </p>
 

@@ -9,6 +9,7 @@ import { TableFilters } from '@/components/admin/table-filters';
 import { Pagination } from '@/components/directory/pagination';
 import { EmptyState, InitialsAvatar, StatusPill } from '@/components/patterns';
 import { Badge } from '@/components/ui/badge';
+import { formatDate, formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'People' };
 export const dynamic = 'force-dynamic';
@@ -118,11 +119,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
       key: 'joined',
       header: 'Joined',
       cell: (r) =>
-        new Date(r.created_at).toLocaleDateString(undefined, {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
+formatDate(r.created_at),
     },
   ];
 
@@ -135,10 +132,10 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
     >
       <StatsCards
         stats={[
-          { title: 'Students', value: (studentCount.count ?? 0).toLocaleString(), subtitle: 'Registered accounts' },
-          { title: 'Alumni', value: (alumniCount.count ?? 0).toLocaleString(), subtitle: 'Claimed an account' },
-          { title: 'Administrators', value: (adminCount.count ?? 0).toLocaleString(), subtitle: 'Can verify claims' },
-          { title: 'Matching filter', value: total.toLocaleString(), subtitle: 'Rows in the table below' },
+          { title: 'Students', value: formatNumber((studentCount.count ?? 0)), subtitle: 'Registered accounts' },
+          { title: 'Alumni', value: formatNumber((alumniCount.count ?? 0)), subtitle: 'Claimed an account' },
+          { title: 'Administrators', value: formatNumber((adminCount.count ?? 0)), subtitle: 'Can verify claims' },
+          { title: 'Matching filter', value: formatNumber(total), subtitle: 'Rows in the table below' },
         ]}
       />
 
@@ -165,7 +162,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         columns={columns}
         rows={rows}
         getRowKey={(r) => r.id}
-        caption={`Page ${page} of ${pageCount} · ${total.toLocaleString()} accounts match`}
+        caption={`Page ${page} of ${pageCount} · ${formatNumber(total)} accounts match`}
         empty={<EmptyState icon={Users} title="No accounts match" description="Try clearing the filters." />}
       />
 

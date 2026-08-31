@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { InitialsAvatar, StatusPill, MatchScore, EmptyState } from '@/components/patterns';
 import { ScheduleDialog } from '@/components/calendar/schedule-dialog';
+import { formatDate, formatDayMonth } from '@/lib/format';
 
 export type RequestView = {
   id: string;
@@ -151,13 +152,9 @@ function RequestCard({ request, viewerRole }: { request: RequestView; viewerRole
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Sent{' '}
-            {new Date(request.created_at).toLocaleDateString(undefined, {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
+            {formatDate(request.created_at)}
             {request.responded_at
-              ? ` · answered ${new Date(request.responded_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+              ? ` · answered ${formatDayMonth(request.responded_at)}`
               : ''}
           </p>
         </div>

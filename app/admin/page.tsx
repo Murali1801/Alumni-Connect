@@ -17,6 +17,7 @@ import {
 import { ClaimRateChart } from '@/components/admin/claim-rate-chart';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { formatFullDateTime, formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Overview' };
 export const dynamic = 'force-dynamic';
@@ -66,14 +67,14 @@ export default async function AdminOverviewPage() {
         stats={[
           {
             title: 'Alumni records',
-            value: data.stats.totalRecords.toLocaleString(),
-            subtitle: `${data.stats.companies.toLocaleString()} employers on file`,
+            value: formatNumber(data.stats.totalRecords),
+            subtitle: `${formatNumber(data.stats.companies)} employers on file`,
             href: '/admin/records',
           },
           {
             title: 'Claim rate',
             value: `${data.stats.claimRate}%`,
-            subtitle: `${data.stats.claimedCount.toLocaleString()} claimed, ${data.stats.verifiedCount.toLocaleString()} verified`,
+            subtitle: `${formatNumber(data.stats.claimedCount)} claimed, ${formatNumber(data.stats.verifiedCount)} verified`,
             href: '/admin/records',
           },
           {
@@ -84,7 +85,7 @@ export default async function AdminOverviewPage() {
           },
           {
             title: 'Requests',
-            value: data.stats.requestsTotal.toLocaleString(),
+            value: formatNumber(data.stats.requestsTotal),
             subtitle: `${data.stats.responseRate}% answered · median ${data.stats.medianHours}h`,
             href: '/admin/requests',
           },
@@ -113,8 +114,8 @@ export default async function AdminOverviewPage() {
             ]}
             footer={
               <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
-                {data.stats.claimedCount.toLocaleString()} of{' '}
-                {data.stats.totalRecords.toLocaleString()} institutional records have been claimed by
+                {formatNumber(data.stats.claimedCount)} of{' '}
+                {formatNumber(data.stats.totalRecords)} institutional records have been claimed by
                 a real account.
               </p>
             }
@@ -159,19 +160,19 @@ export default async function AdminOverviewPage() {
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="opacity-80">Students registered</dt>
-                <dd className="tnum font-semibold">{data.stats.students.toLocaleString()}</dd>
+                <dd className="tnum font-semibold">{formatNumber(data.stats.students)}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="opacity-80">Alumni accounts</dt>
-                <dd className="tnum font-semibold">{data.stats.alumniUsers.toLocaleString()}</dd>
+                <dd className="tnum font-semibold">{formatNumber(data.stats.alumniUsers)}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="opacity-80">Open opportunities</dt>
-                <dd className="tnum font-semibold">{data.stats.openOpportunities.toLocaleString()}</dd>
+                <dd className="tnum font-semibold">{formatNumber(data.stats.openOpportunities)}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="opacity-80">Video sessions</dt>
-                <dd className="tnum font-semibold">{data.stats.sessions.toLocaleString()}</dd>
+                <dd className="tnum font-semibold">{formatNumber(data.stats.sessions)}</dd>
               </div>
             </dl>
           </HighlightCard>
@@ -193,10 +194,7 @@ export default async function AdminOverviewPage() {
                         {a.action.replace(/_/g, ' ')}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(a.created_at).toLocaleString(undefined, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })}
+                        {formatFullDateTime(a.created_at)}
                       </p>
                     </div>
                   </li>

@@ -8,6 +8,7 @@ import { ExportCard } from '@/components/admin/export-card';
 import { DataTable, type Column } from '@/components/admin/data-table';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/patterns';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Reports' };
 export const dynamic = 'force-dynamic';
@@ -47,8 +48,8 @@ export default async function AdminReportsPage() {
 
   const columns: Column<BatchRow>[] = [
     { key: 'batch', header: 'Batch', cell: (r) => r.batch },
-    { key: 'total', header: 'Records', numeric: true, cell: (r) => r.total.toLocaleString() },
-    { key: 'claimed', header: 'Claimed', numeric: true, cell: (r) => r.claimed.toLocaleString() },
+    { key: 'total', header: 'Records', numeric: true, cell: (r) => formatNumber(r.total) },
+    { key: 'claimed', header: 'Claimed', numeric: true, cell: (r) => formatNumber(r.claimed) },
     {
       key: 'rate',
       header: 'Claim rate',
@@ -66,7 +67,7 @@ export default async function AdminReportsPage() {
       key: 'gap',
       header: 'Unclaimed',
       numeric: true,
-      cell: (r) => (r.total - r.claimed).toLocaleString(),
+      cell: (r) => formatNumber((r.total - r.claimed)),
     },
   ];
 
@@ -81,22 +82,22 @@ export default async function AdminReportsPage() {
         stats={[
           {
             title: 'Records covered',
-            value: data.stats.totalRecords.toLocaleString(),
+            value: formatNumber(data.stats.totalRecords),
             subtitle: `${data.claimRateByBatch.length} graduating years`,
           },
           {
             title: 'Claim rate',
             value: `${data.stats.claimRate}%`,
-            subtitle: `${data.stats.claimedCount.toLocaleString()} accounts attached`,
+            subtitle: `${formatNumber(data.stats.claimedCount)} accounts attached`,
           },
           {
             title: 'Requests logged',
-            value: data.stats.requestsTotal.toLocaleString(),
+            value: formatNumber(data.stats.requestsTotal),
             subtitle: `${data.stats.responseRate}% answered`,
           },
           {
             title: 'Employers',
-            value: data.stats.companies.toLocaleString(),
+            value: formatNumber(data.stats.companies),
             subtitle: 'After canonicalisation',
           },
         ]}

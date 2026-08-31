@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, MatchScore, EmptyState } from '@/components/patterns';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Smart matches' };
 export const dynamic = 'force-dynamic';
@@ -81,7 +82,7 @@ export default async function StudentSuggestionsPage() {
     >
       <StatsCards
         stats={[
-          { title: 'Claimed alumni', value: total.toLocaleString(), subtitle: 'Reachable on the network' },
+          { title: 'Claimed alumni', value: formatNumber(total), subtitle: 'Reachable on the network' },
           { title: 'Not yet contacted', value: ranked.length, subtitle: 'Available suggestions' },
           { title: 'Strong matches', value: strong, subtitle: 'Scoring 50 or above' },
           {

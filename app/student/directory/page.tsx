@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, MatchScore, EmptyState } from '@/components/patterns';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Alumni directory' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +46,7 @@ export default async function StudentDirectoryPage({ searchParams }: { searchPar
       user={user}
       badges={badges}
       title="Alumni directory"
-      description={`${result.total.toLocaleString()} alumni match your filters. Claimed profiles are ranked against your own; dormant records are shown for reference only.`}
+      description={`${formatNumber(result.total)} alumni match your filters. Claimed profiles are ranked against your own; dormant records are shown for reference only.`}
       actions={
         !profile ? (
           <Button className="h-9 w-full px-4 sm:w-auto" render={<Link href="/student/settings" />}>

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar } from '@/components/patterns';
+import { formatDateTime } from '@/lib/format';
 
 /* ------------------------------------------------------------------ */
 /* Stat tiles                                                          */
@@ -285,13 +286,7 @@ export function UpcomingSessionCard({
               <h3 className="mb-1 font-semibold text-foreground">{s.title}</h3>
               <p className="mb-1 text-sm text-muted-foreground">with {s.peer_name}</p>
               <p className="mb-4 text-sm text-muted-foreground">
-                {new Date(s.scheduled_at).toLocaleString(undefined, {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}{' '}
+                {formatDateTime(s.scheduled_at)}{' '}
                 · {s.duration_min} min
               </p>
               <Button className="w-full" render={<Link href={`/call/${s.room_id}`} />}>

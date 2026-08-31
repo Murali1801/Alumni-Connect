@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { StatsCards } from '@/components/dashboard/cards';
 import { VerificationQueue, type ClaimRow } from '@/components/admin/verification-queue';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Verification' };
 export const dynamic = 'force-dynamic';
@@ -79,8 +80,8 @@ export default async function AdminVerificationPage() {
             value: claims.length ? `${oldest}d` : '—',
             subtitle: 'Time the first claim has waited',
           },
-          { title: 'Verified', value: (verifiedCount.count ?? 0).toLocaleString(), subtitle: 'Approved to date' },
-          { title: 'Rejected', value: (rejectedCount.count ?? 0).toLocaleString(), subtitle: 'Turned down to date' },
+          { title: 'Verified', value: formatNumber((verifiedCount.count ?? 0)), subtitle: 'Approved to date' },
+          { title: 'Rejected', value: formatNumber((rejectedCount.count ?? 0)), subtitle: 'Turned down to date' },
         ]}
       />
 

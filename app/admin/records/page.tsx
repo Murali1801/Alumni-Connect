@@ -9,6 +9,7 @@ import { DataTable, type Column } from '@/components/admin/data-table';
 import { StatsCards } from '@/components/dashboard/cards';
 import { EmptyState, StatusPill, InitialsAvatar } from '@/components/patterns';
 import type { DirectoryItem } from '@/lib/queries';
+import { formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Alumni records' };
 export const dynamic = 'force-dynamic';
@@ -101,7 +102,7 @@ export default async function AdminRecordsPage({ searchParams }: { searchParams:
     >
       <StatsCards
         stats={[
-          { title: 'Matching records', value: result.total.toLocaleString(), subtitle: 'With current filters' },
+          { title: 'Matching records', value: formatNumber(result.total), subtitle: 'With current filters' },
           {
             title: 'Claimed on this page',
             value: result.items.filter((i) => i.record.claim_status !== 'unclaimed').length,
@@ -123,7 +124,7 @@ export default async function AdminRecordsPage({ searchParams }: { searchParams:
         columns={columns}
         rows={result.items}
         getRowKey={(i) => i.record.id}
-        caption={`Page ${result.page} of ${result.pageCount} · ${result.total.toLocaleString()} records match`}
+        caption={`Page ${result.page} of ${result.pageCount} · ${formatNumber(result.total)} records match`}
         empty={
           <EmptyState
             icon={Database}

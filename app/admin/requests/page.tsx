@@ -9,6 +9,7 @@ import { TableFilters } from '@/components/admin/table-filters';
 import { Pagination } from '@/components/directory/pagination';
 import { EmptyState, StatusPill, InitialsAvatar, MatchScore } from '@/components/patterns';
 import type { RequestRow } from '@/lib/queries';
+import { formatCompactDate, formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Requests' };
 export const dynamic = 'force-dynamic';
@@ -89,7 +90,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
       key: 'sent',
       header: 'Sent',
       cell: (r) =>
-        new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' }),
+formatCompactDate(r.created_at),
     },
     {
       key: 'wait',
@@ -114,7 +115,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
     >
       <StatsCards
         stats={[
-          { title: 'Total requests', value: all.length.toLocaleString(), subtitle: 'All time' },
+          { title: 'Total requests', value: formatNumber(all.length), subtitle: 'All time' },
           {
             title: 'Still pending',
             value: all.filter((r) => r.status === 'pending').length,
@@ -165,7 +166,7 @@ export default async function AdminRequestsPage({ searchParams }: { searchParams
         columns={columns}
         rows={visible}
         getRowKey={(r) => r.id}
-        caption={`Page ${page} of ${pageCount} · ${total.toLocaleString()} requests match`}
+        caption={`Page ${page} of ${pageCount} · ${formatNumber(total)} requests match`}
         empty={<EmptyState icon={Inbox} title="No requests match" description="Try clearing the filters." />}
       />
 

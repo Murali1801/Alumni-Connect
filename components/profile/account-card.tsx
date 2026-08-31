@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { InitialsAvatar, Field } from '@/components/patterns';
 import type { SessionUser } from '@/lib/session';
+import { formatShortMonthYear } from '@/lib/format';
 
 const ROLE_LABEL: Record<string, string> = {
   student: 'Student',
@@ -20,7 +21,7 @@ export function AccountCard({ user }: { user: SessionUser }) {
         <dl className="grid grid-cols-2 gap-6 sm:gap-8">
           <Field label="Role">{ROLE_LABEL[user.role] ?? user.role}</Field>
           <Field label="Member since">
-            {new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+            {formatShortMonthYear(user.created_at)}
           </Field>
         </dl>
       </div>

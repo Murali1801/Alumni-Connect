@@ -8,6 +8,7 @@ import { DataTable, type Column } from '@/components/admin/data-table';
 import { Pagination } from '@/components/directory/pagination';
 import { EmptyState, InitialsAvatar } from '@/components/patterns';
 import { Badge } from '@/components/ui/badge';
+import { formatFullDateTime, formatNumber } from '@/lib/format';
 
 export const metadata = { title: 'Audit log' };
 export const dynamic = 'force-dynamic';
@@ -111,7 +112,7 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
       key: 'when',
       header: 'When',
       cell: (r) =>
-        new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+formatFullDateTime(r.created_at),
     },
   ];
 
@@ -124,12 +125,12 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
     >
       <StatsCards
         stats={[
-          { title: 'Entries', value: total.toLocaleString(), subtitle: 'All time' },
-          { title: 'Verifications', value: verifiedCount.toLocaleString(), subtitle: 'Claims approved' },
-          { title: 'Rejections', value: rejectedCount.toLocaleString(), subtitle: 'Claims turned down' },
+          { title: 'Entries', value: formatNumber(total), subtitle: 'All time' },
+          { title: 'Verifications', value: formatNumber(verifiedCount), subtitle: 'Claims approved' },
+          { title: 'Rejections', value: formatNumber(rejectedCount), subtitle: 'Claims turned down' },
           {
             title: 'Other actions',
-            value: Math.max(0, total - verifiedCount - rejectedCount).toLocaleString(),
+            value: formatNumber(Math.max(0, total - verifiedCount - rejectedCount)),
             subtitle: 'Postings closed, exports and so on',
           },
         ]}
@@ -139,7 +140,7 @@ export default async function AdminAuditPage({ searchParams }: { searchParams: S
         columns={columns}
         rows={rows}
         getRowKey={(r) => r.id}
-        caption={`Page ${page} of ${pageCount} · ${total.toLocaleString()} entries`}
+        caption={`Page ${page} of ${pageCount} · ${formatNumber(total)} entries`}
         empty={
           <EmptyState
             icon={ShieldCheck}

@@ -4,6 +4,7 @@ import type { SessionView } from '@/components/calendar/calendar-view';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, StatusPill, EmptyState } from '@/components/patterns';
+import { formatDateTime } from '@/lib/format';
 
 const CAPABILITIES = [
   { icon: Video, label: 'Two-way HD video and audio', body: 'Streams go straight between the two browsers — nothing is recorded or stored.' },
@@ -62,13 +63,7 @@ export function RoomsView({
 
               <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="size-3.5" />
-                {new Date(s.scheduled_at).toLocaleString(undefined, {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}{' '}
+                {formatDateTime(s.scheduled_at)}{' '}
                 · {s.duration_min} min
               </p>
 
