@@ -118,18 +118,31 @@ work behind symmetric NAT — most mobile data, and plenty of campus and
 corporate wifi — where the media has to be relayed. Those calls sign in fine,
 show both people as present, and then sit on *Connecting…* until they fail.
 
-Set these to give them a relay (optional, but the difference between a call that
-works everywhere and one that works on some networks):
+Set these three to give them a relay:
 
-- `NEXT_PUBLIC_TURN_URL` — comma-separated, e.g.
-  `turn:host:3478?transport=udp,turns:host:5349?transport=tcp`
+- `NEXT_PUBLIC_TURN_URL` — comma-separated
 - `NEXT_PUBLIC_TURN_USERNAME`
 - `NEXT_PUBLIC_TURN_CREDENTIAL`
 
-Any provider works — Cloudflare Calls, Twilio Network Traversal, Metered, or a
-self-hosted coturn. These are `NEXT_PUBLIC_` because the browser is what opens
-the connection; scope the credential to TURN only, and prefer a provider that
-issues short-lived ones.
+Any provider works — Metered, Cloudflare Calls, Twilio Network Traversal, or a
+self-hosted coturn. With Metered's free tier: create an app in their dashboard,
+open its ICE servers list, and use every `turn:`/`turns:` URL it gives you as
+one comma-separated string, with the single username and credential shown
+alongside them. Listing several is worth it — port 443 over TCP is what gets
+through the strictest firewalls.
+
+    NEXT_PUBLIC_TURN_URL=turn:global.relay.metered.ca:80,turn:global.relay.metered.ca:80?transport=tcp,turn:global.relay.metered.ca:443,turns:global.relay.metered.ca:443?transport=tcp
+
+**These are inlined at build time.** Adding them to a host's environment does
+nothing until the next deploy — a redeploy is required, not just a restart. To
+confirm they took, join a room and open **Participants**: the Connection
+readout shows whether a relay is configured, which route types each side
+gathered, and which one the call is actually using. A working relayed call
+reads `via TURN`.
+
+They are `NEXT_PUBLIC_` because the browser is what opens the connection, so
+treat the credential as public: scope it to TURN only, and prefer a provider
+that issues short-lived ones.
 
 ## Licence
 
