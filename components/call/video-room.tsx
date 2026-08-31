@@ -96,6 +96,43 @@ type Phase = 'idle' | 'requesting-media' | 'waiting' | 'connecting' | 'connected
 
 type ChatMessage = { id: string; from: string; name: string; text: string; at: number };
 
+/**
+ * What the connection is actually doing. "Connecting…" over a blank tile looks
+ * the same whether an offer never arrived or ICE cannot find a route between
+ * the two networks — and those have completely different fixes. This is read
+ * off the live RTCPeerConnection so the difference is visible.
+ */
+type Diagnostics = {
+  signaling: RTCSignalingState;
+  connection: RTCPeerConnectionState;
+  ice: RTCIceConnectionState;
+  gathering: RTCIceGatheringState;
+  offerSent: boolean;
+  answered: boolean;
+  localTypes: string[];
+  remoteTypes: string[];
+  route: string | null;
+};
+
+type StatsEntry = {
+  id: string;
+  type: string;
+  state?: string;
+  candidateType?: string;
+  localCandidateId?: string;
+  remoteCandidateId?: string;
+};
+
+const CANDIDATE_LABELS: Record<string, string> = {
+  host: 'direct',
+  srflx: 'via STUN',
+  prflx: 'peer-reflexive',
+  relay: 'via TURN',
+};
+
+const describeTypes = (types: string[]) =>
+  types.length ? types.map((t) => CANDIDATE_LABELS[t] ?? t).join(', ') : 'none yet';
+
 type SignalPayload =
   | { kind: 'description'; from: string; description: RTCSessionDescriptionInit }
   | { kind: 'candidate'; from: string; candidate: RTCIceCandidateInit }
@@ -155,6 +192,14 @@ export function VideoRoom({
   // update lands, so the flag it reads has to live outside the render.
   const sharingRef = React.useRef(false);
 
+  // A signalling message is a single broadcast with no delivery guarantee. If
+  // one is lost the call waits forever, so the watchdog below re-offers — and
+  // it needs to reach the negotiate() that lives inside the lifecycle effect.
+  const negotiateRef = React.useRef<(() => Promise<void>) | null>(null);
+  const answeredRef = React.useRef(false);
+  const offerSentRef = React.useRef(false);
+  const recoveryAttemptsRef = React.useRef(0);
+
   // ICE candidates can arrive before the remote description is applied.
   // Applying one then throws InvalidStateError, so they are held here and
   // flushed the moment a remote description exists.
@@ -180,6 +225,8 @@ export function VideoRoom({
   const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([]);
   const [micId, setMicId] = React.useState<string>('');
   const [peerMuted, setPeerMuted] = React.useState(false);
+  const [diag, setDiag] = React.useState<Diagnostics | null>(null);
+  const [slowConnect, setSlowConnect] = React.useState(false);
 
   const send = React.useCallback((payload: SignalPayload) => {
     void channelRef.current?.send({ type: 'broadcast', event: 'signal', payload });
@@ -193,6 +240,9 @@ export function VideoRoom({
 
     async function start() {
       setPhase('requesting-media');
+      answeredRef.current = false;
+      offerSentRef.current = false;
+      recoveryAttemptsRef.current = 0;
 
       let stream: MediaStream;
       try {
@@ -343,6 +393,7 @@ export function VideoRoom({
           makingOfferRef.current = true;
           await pc.setLocalDescription();
           if (pc.localDescription) {
+            offerSentRef.current = true;
             send({ kind: 'description', from: selfId, description: pc.localDescription.toJSON() });
           }
         } catch (err) {
@@ -355,6 +406,8 @@ export function VideoRoom({
       pc.onnegotiationneeded = () => {
         void negotiate();
       };
+
+      negotiateRef.current = negotiate;
 
       pc.onconnectionstatechange = () => {
         if (cancelled) return;
@@ -422,6 +475,7 @@ export function VideoRoom({
             if (ignoreOfferRef.current) return;
 
             await pc.setRemoteDescription(msg.description);
+            answeredRef.current = true;
 
             // A remote description now exists, so anything buffered while we
             // were waiting can safely be applied.
@@ -575,6 +629,103 @@ export function VideoRoom({
     const t = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [phase]);
+
+  /* ---------------- connection watchdog ---------------- */
+
+  /**
+   * Both people are in the room but no media is flowing. Two causes, two cures:
+   *
+   *   nothing came back at all  → the offer or the answer was lost in transit.
+   *                               Broadcast is fire-and-forget, so re-offer.
+   *   descriptions were swapped → ICE cannot find a route. Re-gather.
+   *
+   * Three attempts, eight seconds apart, then it stops and the panel explains
+   * what it saw rather than retrying into a wall.
+   */
+  React.useEffect(() => {
+    if (!peerPresent || phase === 'connected' || phase === 'ended' || phase === 'error') return;
+
+    let waited = 0;
+    const id = setInterval(() => {
+      waited += 1;
+      setSlowConnect(waited >= 10);
+      if (waited % 8 !== 0) return;
+
+      const pc = pcRef.current;
+      if (!pc || pc.connectionState === 'connected' || pc.signalingState === 'closed') return;
+      if (recoveryAttemptsRef.current >= 3) return;
+      recoveryAttemptsRef.current += 1;
+
+      if (!answeredRef.current) void negotiateRef.current?.();
+      else pc.restartIce();
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [peerPresent, phase]);
+
+  /* ---------------- live connection readout ---------------- */
+
+  React.useEffect(() => {
+    if (phase === 'ended') return;
+    // Only worth polling while something is wrong, or while somebody is
+    // looking at the participants panel. The readout is rendered from that
+    // panel alone, so leaving a stale sample behind costs nothing — reopening
+    // the panel re-arms this effect and resamples immediately.
+    if (phase === 'connected' && panel !== 'people') return;
+
+    let cancelled = false;
+    const sample = async () => {
+      const pc = pcRef.current;
+      if (!pc || cancelled) return;
+
+      const local = new Set<string>();
+      const remote = new Set<string>();
+      let route: string | null = null;
+
+      try {
+        const stats = await pc.getStats();
+        const candidates = new Map<string, StatsEntry>();
+        stats.forEach((r: StatsEntry) => {
+          if (r.type === 'local-candidate' || r.type === 'remote-candidate') candidates.set(r.id, r);
+        });
+        stats.forEach((r: StatsEntry) => {
+          if (r.type === 'local-candidate' && r.candidateType) local.add(r.candidateType);
+          if (r.type === 'remote-candidate' && r.candidateType) remote.add(r.candidateType);
+          if (r.type === 'candidate-pair' && r.state === 'succeeded') {
+            const l = r.localCandidateId ? candidates.get(r.localCandidateId) : undefined;
+            const m = r.remoteCandidateId ? candidates.get(r.remoteCandidateId) : undefined;
+            if (l?.candidateType && m?.candidateType) {
+              route = `${CANDIDATE_LABELS[l.candidateType] ?? l.candidateType} → ${
+                CANDIDATE_LABELS[m.candidateType] ?? m.candidateType
+              }`;
+            }
+          }
+        });
+      } catch {
+        /* getStats can reject on a closing connection */
+      }
+
+      if (cancelled) return;
+      setDiag({
+        signaling: pc.signalingState,
+        connection: pc.connectionState,
+        ice: pc.iceConnectionState,
+        gathering: pc.iceGatheringState,
+        offerSent: offerSentRef.current,
+        answered: answeredRef.current,
+        localTypes: [...local],
+        remoteTypes: [...remote],
+        route,
+      });
+    };
+
+    void sample();
+    const id = setInterval(() => void sample(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [phase, panel]);
 
   /* ---------------- controls ---------------- */
 
@@ -824,6 +975,25 @@ export function VideoRoom({
                 )}
               </div>
             )}
+            {peerPresent && phase !== 'connected' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <InitialsAvatar name={peerName} size="xl" />
+                <div className="space-y-1">
+                  <p className="flex items-center justify-center gap-2 text-sm font-medium">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    {peerName} is in the room — connecting video
+                  </p>
+                  {slowConnect && (
+                    <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+                      {diag?.answered
+                        ? 'Both sides agreed on the call but cannot find a route to each other. This is a network restriction, not a fault in the room — it needs a TURN relay to get through.'
+                        : 'Waiting for the other side to respond. Retrying the connection automatically.'}{' '}
+                      Open Participants for the details.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             {peerPresent && (
               <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur">
                 {peerName}
@@ -932,6 +1102,42 @@ export function VideoRoom({
                     </label>
                   )}
                 </li>
+
+                {/* What the connection is actually doing. Without this a failed
+                    call is indistinguishable from a slow one. */}
+                {diag && (
+                  <li className="mt-4 space-y-2 border-t border-border px-2 pt-4">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Connection
+                    </span>
+                    <dl className="space-y-1 text-[11px]">
+                      <Row label="State" value={diag.connection} />
+                      <Row label="Negotiation" value={diag.signaling} />
+                      <Row
+                        label="Handshake"
+                        value={
+                          diag.answered
+                            ? 'complete'
+                            : diag.offerSent
+                              ? 'offer sent, no reply'
+                              : 'not started'
+                        }
+                      />
+                      <Row label="Your routes" value={describeTypes(diag.localTypes)} />
+                      <Row label="Their routes" value={describeTypes(diag.remoteTypes)} />
+                      <Row label="In use" value={diag.route ?? 'none'} />
+                    </dl>
+                    {diag.connection !== 'connected' &&
+                      diag.answered &&
+                      !diag.localTypes.includes('relay') && (
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          No relay route is available. On a network that blocks direct
+                          peer-to-peer traffic the call cannot connect without a TURN
+                          server configured.
+                        </p>
+                      )}
+                  </li>
+                )}
               </ul>
             ) : (
               <>
@@ -1043,6 +1249,15 @@ export function VideoRoom({
  *
  * An open chat panel is not a problem, so it must not be red.
  */
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="truncate text-right font-mono">{value}</dd>
+    </div>
+  );
+}
+
 function ControlButton({
   children,
   tone,
