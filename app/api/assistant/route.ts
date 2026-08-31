@@ -14,8 +14,35 @@ const askSchema = z.object({
     .optional(),
 });
 
-/** Model used when an OpenRouter key is configured. Free tier on OpenRouter. */
-const MODEL = process.env.OPENROUTER_MODEL ?? 'meta-llama/llama-3.3-70b-instruct:free';
+/**
+ * Models to try, in order, when an OpenRouter key is configured.
+ *
+ * OpenRouter's free tier rate-limits hard and unpredictably — in testing three
+ * of four candidates returned 429 within the same second — so a single model is
+ * not dependable. Each is tried in turn and the first that answers wins; if all
+ * of them fail the curated knowledge base still answers.
+ *
+ * Override with a comma-separated OPENROUTER_MODEL. Free slugs also come and go
+ * (the one this shipped with stopped being free), so check
+ * https://openrouter.ai/models?max_price=0 if every model starts failing.
+ */
+const MODELS = (
+  process.env.OPENROUTER_MODEL ??
+  'minimax/minimax-m2.7:free,google/gemma-4-31b-it:free,z-ai/glm-5.2:free,nvidia/nemotron-3-super-120b-a12b:free'
+)
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+/**
+ * Per-model budget, and a hard ceiling across all attempts.
+ *
+ * Free models are slow — 10 to 30 seconds is normal — and a serverless function
+ * that runs past its platform limit is killed with no response at all. Stopping
+ * ourselves at 40s means the curated answer still gets returned instead.
+ */
+const MODEL_TIMEOUT_MS = 14_000;
+const TOTAL_BUDGET_MS = 40_000;
 
 function grounded(facts: Fact[]) {
   return facts
@@ -103,38 +130,59 @@ export async function POST(request: Request) {
       grounded(context.length ? context : FACTS.slice(0, 8)),
     ].join('\n');
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        // OpenRouter asks for these for attribution; they are not secrets.
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-        'X-Title': 'SJCEM Alumni Network',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 700,
-        temperature: 0.4,
-        messages: [
-          { role: 'system', content: system },
-          ...(body.history ?? []),
-          { role: 'user', content: body.question },
-        ],
-      }),
-      signal: AbortSignal.timeout(25_000),
-    });
+    const messages = [
+      { role: 'system', content: system },
+      ...(body.history ?? []),
+      { role: 'user', content: body.question },
+    ];
 
-    if (!res.ok) {
-      console.warn(`assistant: OpenRouter returned ${res.status}; falling back to the knowledge base`);
-      return NextResponse.json(offlineAnswer(body.question, role));
+    const deadline = Date.now() + TOTAL_BUDGET_MS;
+
+    for (const model of MODELS) {
+      // Do not start an attempt we cannot finish inside the budget.
+      const remaining = deadline - Date.now();
+      if (remaining < 4_000) {
+        console.warn('assistant: out of time budget, using the knowledge base');
+        break;
+      }
+
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            // OpenRouter asks for these for attribution; they are not secrets.
+            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+            'X-Title': 'SJCEM Alumni Network',
+          },
+          body: JSON.stringify({ model, max_tokens: 700, temperature: 0.4, messages }),
+          signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, remaining)),
+        });
+
+        if (!res.ok) {
+          // 429 is routine on the free tier; 404 means the slug stopped being
+          // free. Either way the next model may still answer.
+          console.warn(`assistant: ${model} returned ${res.status}, trying the next model`);
+          continue;
+        }
+
+        const data = await res.json();
+        const answer: string | undefined = data?.choices?.[0]?.message?.content?.trim();
+        if (!answer) {
+          console.warn(`assistant: ${model} returned an empty answer, trying the next model`);
+          continue;
+        }
+
+        return NextResponse.json({ answer, sources: context, mode: 'llm' as const, model });
+      } catch (err) {
+        console.warn(`assistant: ${model} failed (${(err as Error).message}), trying the next model`);
+      }
     }
 
-    const data = await res.json();
-    const answer: string | undefined = data?.choices?.[0]?.message?.content?.trim();
-    if (!answer) return NextResponse.json(offlineAnswer(body.question, role));
-
-    return NextResponse.json({ answer, sources: context, mode: 'llm' as const });
+    // Every model was rate-limited or down — the curated answer still stands.
+    console.warn('assistant: all models unavailable, using the knowledge base');
+    return NextResponse.json(offlineAnswer(body.question, role));
   } catch (err) {
     // A model outage must never take the help panel down.
     console.warn('assistant: LLM call failed, falling back to the knowledge base', err);
