@@ -938,7 +938,7 @@ export function VideoRoom({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar */}
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
@@ -972,15 +972,15 @@ export function VideoRoom({
       </header>
 
       {/* Stage */}
-      <div className="flex min-h-0 flex-1">
-        <div className="relative flex min-w-0 flex-1 items-center justify-center p-3 sm:p-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center p-3 sm:p-4">
           {/* Remote */}
           <div className="relative h-full w-full overflow-hidden rounded-xl bg-muted ring-1 ring-border">
             <video
               ref={remoteVideo}
               autoPlay
               playsInline
-              className={cn('h-full w-full object-cover', !peerPresent && 'invisible')}
+              className={cn('h-full w-full object-contain', !peerPresent && 'invisible')}
             />
             {!peerPresent && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
@@ -1061,7 +1061,7 @@ export function VideoRoom({
 
         {/* Side panel */}
         {panel && (
-          <aside className="flex w-full max-w-xs shrink-0 flex-col border-l border-border bg-card md:w-80">
+          <aside className="flex min-h-0 w-full max-w-xs shrink-0 flex-col border-l border-border bg-card md:w-80">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold">{panel === 'chat' ? 'Chat' : 'Participants'}</h2>
               <Button size="icon-xs" variant="ghost" onClick={() => setPanel(null)} aria-label="Close panel">
