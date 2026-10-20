@@ -12,11 +12,12 @@ import {
 } from 'lucide-react';
 import { requireUser } from '@/lib/session';
 import { getNavBadges } from '@/lib/badges';
-import { getAlumniRecord, getStudentProfile } from '@/lib/queries';
+import { getAlumniRecord, getCareerHistory, getStudentProfile } from '@/lib/queries';
 import { scoreMatch } from '@/lib/matching';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { RequestDialog } from '@/components/directory/request-dialog';
+import { CareerHistoryCard } from '@/components/profile/career-history';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
   if (!record) notFound();
 
   const alumniProfile = record.alumni_profiles;
+  const history = alumniProfile?.user_id ? await getCareerHistory(alumniProfile.user_id) : null;
   const match = profile
     ? scoreMatch(profile, record, 'mentorship')
     : {
@@ -96,6 +98,9 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
                   <h2 className="font-display text-xl text-foreground">{record.full_name}</h2>
                   <StatusPill status={record.claim_status} />
                 </div>
+                {history?.headline && (
+                  <p className="mt-1 text-sm font-medium text-foreground">{history.headline}</p>
+                )}
                 <p className="mt-1 text-sm text-muted-foreground">
                   {alumniProfile?.designation ?? record.first_role ?? 'Role not shared'}
                   {company ? ` at ${company}` : ''}
@@ -156,6 +161,8 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
               <SkillTags skills={alumniProfile?.skills} max={16} />
             </div>
           </Card>
+
+          <CareerHistoryCard history={history} />
 
           {/* Match breakdown */}
           <Card className="gap-0 p-6">

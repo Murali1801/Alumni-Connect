@@ -2,18 +2,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireApiUser } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { canonicalise } from '@/lib/companies';
 
 export const dynamic = 'force-dynamic';
-
-/** Same normalisation the ingest used, so "TCS Ltd." and "TCS ltd" collapse. */
-function canonicalise(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\b(pvt|private|ltd|limited|inc|llp|llc|co|company|corp|corporation)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 export async function GET(request: Request) {
   const auth = await requireApiUser();
