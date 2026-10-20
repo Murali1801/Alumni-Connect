@@ -1,0 +1,87 @@
+name: Deploy to Cloudflare
+
+# Pull requests build and test only. Pushes to main, and manual runs, also deploy.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time per branch; a newer push waits rather than racing.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Public values, inlined into the bundle at build time. Repository
+      # variables (not secrets) because they end up in the browser anyway.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Check build-time variables
+        run: |
+          missing=""
+          for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_APP_URL; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository variables:$missing (Settings > Secrets and variables > Actions > Variables)"
+            exit 1
+          fi
+
+      # OpenNext copies every .env file into the Worker; none may exist here.
+      - run: node scripts/assert-no-local-env.mjs
+
+      - run: npx opennextjs-cloudflare build
+
+      - name: Deploy
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # Server-only values, uploaded as Worker secrets with this deploy.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          STUDENT_EMAIL_DOMAINS: ${{ vars.STUDENT_EMAIL_DOMAINS }}
+          CLOUDFLARE_TURN_KEY_ID: ${{ secrets.CLOUDFLARE_TURN_KEY_ID }}
+          CLOUDFLARE_TURN_API_TOKEN: ${{ secrets.CLOUDFLARE_TURN_API_TOKEN }}
+          TURN_URL: ${{ secrets.TURN_URL }}
+          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
+          TURN_CREDENTIAL: ${{ secrets.TURN_CREDENTIAL }}
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::CLOUDFLARE_API_TOKEN secret is not set"; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::CLOUDFLARE_ACCOUNT_ID variable is not set"; exit 1; }
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || { echo "::error::SUPABASE_SERVICE_ROLE_KEY secret is not set"; exit 1; }
+
+          # Written outside the checkout so it can never be bundled or committed.
+          # Unset optional values are skipped; secrets already on the Worker are kept.
+          secrets_file="$RUNNER_TEMP/worker-secrets.json"
+          trap 'rm -f "$secrets_file"' EXIT
+          node -e '
+            const names = ["SUPABASE_SERVICE_ROLE_KEY", "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "STUDENT_EMAIL_DOMAINS",
+              "CLOUDFLARE_TURN_KEY_ID", "CLOUDFLARE_TURN_API_TOKEN", "TURN_URL", "TURN_USERNAME", "TURN_CREDENTIAL"];
+            const secrets = Object.fromEntries(names.filter((n) => process.env[n]).map((n) => [n, process.env[n]]));
+            require("node:fs").writeFileSync(process.argv[1], JSON.stringify(secrets), { mode: 0o600 });
+            console.log("Uploading Worker secrets:", Object.keys(secrets).join(", "));
+          ' "$secrets_file"
+
+          npx opennextjs-cloudflare deploy --secrets-file "$secrets_file"
