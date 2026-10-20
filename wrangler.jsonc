@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Test URL before the custom domain is attached: https://sjcem-alumni.<subdomain>.workers.dev
+  // Live at https://alumni.muralnetworks.in, also https://sjcem-alumni.muralidharacharya7.workers.dev
   "name": "sjcem-alumni",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-01",
@@ -12,7 +12,8 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "alumni.muralnetworks.in", "custom_domain": true }]
   // Server-only secrets are set with `wrangler secret put`, never here:
   // SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY, CLOUDFLARE_TURN_KEY_ID,
   // CLOUDFLARE_TURN_API_TOKEN (or TURN_URL / TURN_USERNAME / TURN_CREDENTIAL).
