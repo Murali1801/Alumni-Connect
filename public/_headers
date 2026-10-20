@@ -1,0 +1,4 @@
+# https://developers.cloudflare.com/workers/static-assets/headers
+# Hashed build output never changes under the same name.
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable
