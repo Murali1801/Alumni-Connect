@@ -1,22 +1,24 @@
 import { requireUser } from '@/lib/session';
 import { getNavBadges } from '@/lib/badges';
-import { getAlumniProfile, getAlumniRecordForUser, getCareerHistory } from '@/lib/queries';
+import { getAlumniPosts, getAlumniProfile, getAlumniRecordForUser, getCareerHistory } from '@/lib/queries';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { AlumniProfileForm } from '@/components/profile/alumni-profile-form';
 import { InstitutionalRecordCard } from '@/components/profile/institutional-record-card';
 import { LinkedInImportCard } from '@/components/profile/linkedin-import-card';
 import { CareerHistoryCard } from '@/components/profile/career-history';
+import { PostsCard } from '@/components/posts/posts-card';
 
 export const metadata = { title: 'My profile' };
 export const dynamic = 'force-dynamic';
 
 export default async function AlumniProfilePage() {
   const user = await requireUser(['alumni']);
-  const [badges, profile, record, history] = await Promise.all([
+  const [badges, profile, record, history, posts] = await Promise.all([
     getNavBadges(user),
     getAlumniProfile(user.id),
     getAlumniRecordForUser(user.id),
     getCareerHistory(user.id),
+    getAlumniPosts(user.id),
   ]);
 
   return (
@@ -45,6 +47,7 @@ export default async function AlumniProfilePage() {
         }}
       />
       <CareerHistoryCard history={history} />
+      {profile && <PostsCard posts={posts} own verified={record?.claim_status === 'verified'} />}
     </DashboardShell>
   );
 }

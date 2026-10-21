@@ -18,6 +18,7 @@ import {
   UserCircle,
   FileText,
   Database,
+  Newspaper,
 } from 'lucide-react';
 import type { Role } from '@/lib/session';
 
@@ -52,6 +53,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       items: [
         { label: 'Dashboard', href: '/student', icon: LayoutDashboard, exact: true },
         { label: 'Alumni Directory', href: '/student/directory', icon: Users },
+        { label: 'Network Feed', href: '/student/feed', icon: Newspaper },
         { label: 'My Requests', href: '/student/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/student/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
         { label: 'Opportunities', href: '/student/opportunities', icon: Briefcase, badgeKey: 'openOpportunities' },
@@ -83,6 +85,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: 'Workspace',
       items: [
         { label: 'Dashboard', href: '/alumni', icon: LayoutDashboard, exact: true },
+        { label: 'Network Feed', href: '/alumni/feed', icon: Newspaper },
         { label: 'Request Inbox', href: '/alumni/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/alumni/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
         { label: 'My Mentees', href: '/alumni/mentees', icon: Users },
