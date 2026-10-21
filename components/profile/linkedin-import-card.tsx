@@ -40,7 +40,7 @@ export function LinkedInImportCard({ importedAt }: { importedAt: string | null }
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             {importedAt
               ? `Last imported ${formatDate(importedAt)}. Import again whenever you change roles or add skills.`
-              : 'Upload your LinkedIn data export to add your experience, education, skills and links in one go. You choose what is published.'}
+              : 'Upload your LinkedIn data export to add your experience, education, skills, links, posts and articles in one go. You choose what is published.'}
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">

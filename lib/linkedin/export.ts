@@ -44,6 +44,22 @@ export type Project = {
   end: YearMonth | null;
 };
 
+/** A post (Shares.csv) or article (Articles/*.html) the alumnus wrote on LinkedIn. */
+export type LinkedInPost = {
+  kind: 'post' | 'article';
+  /** Stable across re-imports: the post or article URL when the export has one. */
+  externalId: string;
+  title: string | null;
+  body: string;
+  url: string | null;
+  sharedUrl: string | null;
+  hasMedia: boolean;
+  /** ISO 8601, UTC. */
+  postedAt: string;
+  /** Shared only with connections on LinkedIn; worth a second look before publishing. */
+  connectionsOnly: boolean;
+};
+
 export type LinkedInImport = {
   headline: string | null;
   summary: string | null;
@@ -55,11 +71,13 @@ export type LinkedInImport = {
   skills: string[];
   certifications: Certification[];
   projects: Project[];
+  /** Newest first. Empty when the archive has no Shares.csv or Articles folder. */
+  posts: LinkedInPost[];
   /** Which of the wanted files the archive actually contained. */
   filesFound: string[];
 };
 
-/** Caps match the check constraints in 0002_linkedin_profile.sql. */
+/** Caps match the check constraints in 0002_linkedin_profile.sql and 0003_alumni_posts.sql. */
 export const LIMITS = {
   positions: 40,
   education: 20,
@@ -70,9 +88,14 @@ export const LIMITS = {
   headline: 220,
   shortText: 200,
   longText: 2000,
+  posts: 500,
+  postTitle: 300,
+  postBody: 3000,
+  articleBody: 10000,
+  externalId: 500,
 } as const;
 
-const WANTED = [
+const PROFILE_FILES = [
   'profile.csv',
   'positions.csv',
   'skills.csv',
@@ -80,7 +103,14 @@ const WANTED = [
   'certifications.csv',
   'projects.csv',
 ] as const;
+
+const WANTED = [...PROFILE_FILES, 'shares.csv'] as const;
 type WantedFile = (typeof WANTED)[number];
+
+/** LinkedIn puts articles at Articles/Articles/<date title>.html. */
+function isArticlePath(path: string): boolean {
+  return /(^|[\\/])articles[\\/].+\.html?$/i.test(path);
+}
 
 /* ------------------------------------------------------------------ */
 /* CSV                                                                 */
@@ -252,6 +282,127 @@ export function experienceYears(positions: Position[], now: Date = new Date()): 
 }
 
 /* ------------------------------------------------------------------ */
+/* Posts and articles                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Paragraph breaks survive; runs of spaces and blank lines do not. */
+function postText(v: string | undefined, max: number): string {
+  return (v ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, max);
+}
+
+/** "2023-01-15 08:21:37" (LinkedIn's export clock is UTC) → ISO 8601. */
+export function parseShareDate(raw: string | undefined): string | null {
+  const m = (raw ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  const [, y, mo, d, h = '00', mi = '00', s = '00'] = m;
+  const date = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+  return Number.isNaN(date.getTime()) || date.getUTCMonth() !== +mo - 1 ? null : date.toISOString();
+}
+
+/** Shares.csv: one row per post the member wrote or reshared with a comment. */
+export function parseShares(csv: string): LinkedInPost[] {
+  return readTable(csv, 'ShareLink')
+    .map((r): LinkedInPost | null => {
+      const postedAt = parseShareDate(r['Date']);
+      const body = postText(r['ShareCommentary'], LIMITS.postBody);
+      const sharedUrl = safeUrl(r['SharedUrl']);
+      const hasMedia = Boolean((r['MediaUrl'] ?? '').trim());
+      // A row with no words, link or media is a bare repost: nothing of theirs to show.
+      if (!postedAt || (!body && !sharedUrl && !hasMedia)) return null;
+      const url = safeUrl(r['ShareLink']);
+      return {
+        kind: 'post',
+        externalId: (url ?? `share:${postedAt}:${body.slice(0, 80)}`).slice(0, LIMITS.externalId),
+        title: null,
+        body,
+        url,
+        sharedUrl,
+        hasMedia,
+        postedAt,
+        connectionsOnly: /connection/i.test(r['Visibility'] ?? ''),
+      };
+    })
+    .filter((p): p is LinkedInPost => p !== null);
+}
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+
+function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+|#39);/gi, (whole, name: string) => {
+    if (name[0] === '#') {
+      const code = name[1].toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : whole;
+    }
+    return ENTITIES[name.toLowerCase()] ?? whole;
+  });
+}
+
+/** HTML to plain text, keeping block boundaries as line breaks. Output is rendered as text, never as HTML. */
+function htmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr)>/gi, '\n\n')
+      .replace(/<li\b[^>]*>/gi, '• ')
+      .replace(/<[^>]+>/g, ''),
+  );
+}
+
+/**
+ * One file from the Articles folder. LinkedIn writes a small page per article:
+ * the title as an <h1> (linking to the published article), "Created on" and
+ * "Published on" lines, then the article body.
+ */
+export function parseArticle(fileName: string, html: string): LinkedInPost | null {
+  const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  const titleTag = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  const title = text(htmlToText(h1?.[1] ?? titleTag?.[1] ?? ''), LIMITS.postTitle);
+
+  const url = safeUrl(html.match(/href="(https?:\/\/(?:www\.)?linkedin\.com\/pulse\/[^"]+)"/i)?.[1]);
+  const stamp =
+    html.match(/Published on\s*(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?)/i)?.[1] ??
+    html.match(/Created on\s*(\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?)/i)?.[1] ??
+    fileName.match(/(\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}(?::\d{2})?)?)/)?.[1];
+  const postedAt = parseShareDate(stamp);
+
+  // The body is everything after the title, minus the created/published lines.
+  const afterTitle = h1 ? html.slice((h1.index ?? 0) + h1[0].length) : html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
+  const body = postText(
+    htmlToText(afterTitle.replace(/<p\b[^>]*>\s*(Created|Published) on[\s\S]*?<\/p>/gi, '')),
+    LIMITS.articleBody,
+  );
+
+  if (!postedAt || (!title && !body)) return null;
+  return {
+    kind: 'article',
+    externalId: (url ?? `article:${postedAt}:${title ?? ''}`).slice(0, LIMITS.externalId),
+    title,
+    body,
+    url,
+    sharedUrl: null,
+    hasMedia: /<img\b/i.test(afterTitle),
+    postedAt,
+    connectionsOnly: false,
+  };
+}
+
+/** Newest first, one entry per external id, capped. */
+function mergePosts(posts: LinkedInPost[]): LinkedInPost[] {
+  const seen = new Set<string>();
+  return posts
+    .sort((a, b) => b.postedAt.localeCompare(a.postedAt))
+    .filter((p) => (seen.has(p.externalId) ? false : (seen.add(p.externalId), true)))
+    .slice(0, LIMITS.posts);
+}
+
+/* ------------------------------------------------------------------ */
 /* Archive                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -259,8 +410,11 @@ function basename(path: string): string {
   return path.split(/[\\/]/).pop()!.toLowerCase();
 }
 
-/** Parse the wanted CSVs, keyed by lowercase basename. */
-export function parseLinkedInFiles(files: Partial<Record<WantedFile, string>>): LinkedInImport {
+/** Parse the wanted CSVs (keyed by lowercase basename) and any article pages. */
+export function parseLinkedInFiles(
+  files: Partial<Record<WantedFile, string>>,
+  articles: { name: string; html: string }[] = [],
+): LinkedInImport {
   const profile = files['profile.csv'] ? readTable(files['profile.csv'], 'First Name')[0] : undefined;
 
   const positions = sortPositions(
@@ -331,7 +485,11 @@ export function parseLinkedInFiles(files: Partial<Record<WantedFile, string>>): 
     skills,
     certifications,
     projects,
-    filesFound: WANTED.filter((f) => files[f] !== undefined),
+    posts: mergePosts([
+      ...(files['shares.csv'] ? parseShares(files['shares.csv']) : []),
+      ...articles.map((a) => parseArticle(a.name, a.html)).filter((a): a is LinkedInPost => a !== null),
+    ]),
+    filesFound: PROFILE_FILES.filter((f) => files[f] !== undefined),
   };
 }
 
@@ -342,23 +500,25 @@ export function readLinkedInZip(bytes: Uint8Array): LinkedInImport {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(bytes, {
-      filter: (file) => (WANTED as readonly string[]).includes(basename(file.name)),
+      filter: (file) => (WANTED as readonly string[]).includes(basename(file.name)) || isArticlePath(file.name),
     });
   } catch {
     throw new LinkedInExportError('That file is not a zip archive. Upload the .zip LinkedIn emailed you.');
   }
 
   const files: Partial<Record<WantedFile, string>> = {};
+  const articles: { name: string; html: string }[] = [];
   for (const [name, data] of Object.entries(entries)) {
-    files[basename(name) as WantedFile] = strFromU8(data);
+    if (isArticlePath(name)) articles.push({ name: basename(name), html: strFromU8(data) });
+    else files[basename(name) as WantedFile] = strFromU8(data);
   }
-  if (Object.keys(files).length === 0) {
+  if (Object.keys(files).length === 0 && articles.length === 0) {
     throw new LinkedInExportError(
-      'This zip has none of the LinkedIn profile files (Profile.csv, Positions.csv, Skills.csv…). ' +
+      'This zip has none of the LinkedIn profile or post files (Profile.csv, Positions.csv, Shares.csv…). ' +
         'Make sure it is the archive from "Get a copy of your data".',
     );
   }
-  return parseLinkedInFiles(files);
+  return parseLinkedInFiles(files, articles);
 }
 
 /** "2020-01" → "Jan 2020", "2020" → "2020". */
