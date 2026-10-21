@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/lib/format';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,8 +29,9 @@ import {
   LinkedInExportError,
   readLinkedInZip,
   type LinkedInImport,
+  type LinkedInPost,
 } from '@/lib/linkedin/export';
-import type { LinkedInImportPayload } from '@/lib/linkedin/schema';
+import { toPostPayload, type LinkedInImportPayload } from '@/lib/linkedin/schema';
 
 export type ExistingProfile = {
   headline: string | null;
@@ -54,7 +56,8 @@ type Section =
   | 'skills'
   | 'certifications'
   | 'projects'
-  | 'websites';
+  | 'websites'
+  | 'posts';
 
 type Review = {
   include: Record<Section, boolean>;
@@ -69,6 +72,8 @@ type Review = {
   certifications: boolean[];
   projects: boolean[];
   websites: boolean[];
+  /** Posts start unticked: publishing someone's posts should be a deliberate choice. */
+  posts: boolean[];
   skills: Set<string>;
   skillMode: 'merge' | 'replace';
 };
@@ -87,6 +92,7 @@ function initialReview(data: LinkedInImport, existing: ExistingProfile): Review 
       certifications: data.certifications.length > 0,
       projects: data.projects.length > 0,
       websites: data.websites.length > 0,
+      posts: data.posts.length > 0,
     },
     headline: data.headline ?? '',
     bio: (data.summary ?? '').slice(0, BIO_MAX),
@@ -99,6 +105,7 @@ function initialReview(data: LinkedInImport, existing: ExistingProfile): Review 
     certifications: all(data.certifications.length),
     projects: all(data.projects.length),
     websites: all(data.websites.length),
+    posts: data.posts.map(() => false),
     skills: new Set(data.skills),
     skillMode: 'merge',
   };
@@ -106,6 +113,26 @@ function initialReview(data: LinkedInImport, existing: ExistingProfile): Review 
 
 function pick<T>(items: T[], selected: boolean[]): T[] {
   return items.filter((_, i) => selected[i]);
+}
+
+function selectedPosts(data: LinkedInImport, r: Review): LinkedInPost[] {
+  return r.include.posts ? pick(data.posts, r.posts) : [];
+}
+
+/** A post's label in the review list: the article title, or the start of the text. */
+function postLabel(p: LinkedInPost): string {
+  if (p.title) return p.title;
+  const firstLine = p.body.split('\n')[0].trim();
+  if (firstLine) return firstLine.length > 90 ? `${firstLine.slice(0, 90)}…` : firstLine;
+  return p.hasMedia ? 'Photo or video post' : 'Shared link';
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
 function buildPayload(data: LinkedInImport, r: Review, existing: ExistingProfile): LinkedInImportPayload {
@@ -193,24 +220,37 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
   }
 
   const payload = buildPayload(data, review, existing);
-  const sectionCount = Object.values(review.include).filter(Boolean).length;
-  const nothingChosen = Object.keys(payload).length === 0;
+  const posts = selectedPosts(data, review);
+  const hasProfile = Object.keys(payload).length > 0;
+  const sectionCount = (Object.keys(review.include) as Section[]).filter((s) => s !== 'posts' && review.include[s]).length;
+  const nothingChosen = !hasProfile && posts.length === 0;
+
+  async function send(url: string, body: unknown, fallback: string) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? fallback);
+  }
 
   async function publish() {
     setPublishing(true);
     try {
-      const res = await fetch('/api/profile/alumni/linkedin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? 'Could not publish your profile');
-      toast.success('Your LinkedIn details are on your profile.');
+      if (hasProfile) await send('/api/profile/alumni/linkedin', payload, 'Could not publish your profile');
+      if (posts.length) {
+        await send('/api/profile/alumni/linkedin/posts', { posts: posts.map(toPostPayload) }, 'Could not publish your posts');
+      }
+      const parts = [
+        hasProfile ? 'your LinkedIn details' : null,
+        posts.length ? `${posts.length} post${posts.length === 1 ? '' : 's'}` : null,
+      ].filter(Boolean);
+      toast.success(`Published ${parts.join(' and ')} to your profile.`);
       router.push('/alumni/profile');
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not publish your profile');
+      toast.error(err instanceof Error ? err.message : 'Could not publish');
     } finally {
       setPublishing(false);
     }
@@ -220,13 +260,14 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
     setReview((prev) => (prev ? { ...prev, [key]: value } : prev));
   const toggleSection = (s: Section, on: boolean) =>
     setReview((prev) => (prev ? { ...prev, include: { ...prev.include, [s]: on } } : prev));
-  const toggleItem = (key: 'positions' | 'education' | 'certifications' | 'projects' | 'websites', i: number, on: boolean) =>
+  const toggleItem = (key: 'positions' | 'education' | 'certifications' | 'projects' | 'websites' | 'posts', i: number, on: boolean) =>
     setReview((prev) => {
       if (!prev) return prev;
       const next = [...prev[key]];
       next[i] = on;
       return { ...prev, [key]: next };
     });
+  const setAllPosts = (on: boolean) => set('posts', data.posts.map(() => on));
   const toggleSkill = (skill: string, on: boolean) =>
     setReview((prev) => {
       if (!prev) return prev;
@@ -237,7 +278,14 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
     });
 
   const empty =
-    !data.headline && !data.summary && !data.positions.length && !data.education.length && !data.skills.length;
+    !data.headline &&
+    !data.summary &&
+    !data.positions.length &&
+    !data.education.length &&
+    !data.skills.length &&
+    !data.posts.length;
+  const articleCount = data.posts.filter((p) => p.kind === 'article').length;
+  const postCount = data.posts.length - articleCount;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -249,7 +297,11 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-foreground">{fileName}</p>
                 <p className="text-xs text-muted-foreground">
-                  Read on this device. Found {data.filesFound.length} of 6 profile files.
+                  Read on this device. Found {data.filesFound.length} of 6 profile files
+                  {data.posts.length
+                    ? `, ${postCount} post${postCount === 1 ? '' : 's'} and ${articleCount} article${articleCount === 1 ? '' : 's'}`
+                    : ''}
+                  .
                 </p>
               </div>
             </div>
@@ -445,6 +497,45 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
             </ItemList>
           </ReviewSection>
         )}
+
+        {data.posts.length > 0 && (
+          <ReviewSection
+            title="Posts and articles"
+            description="Ticked posts appear on your profile and in the network feed once your record is verified. Nothing is ticked until you choose."
+            included={review.include.posts}
+            onToggle={(on) => toggleSection('posts', on)}
+            count={[review.posts.filter(Boolean).length, data.posts.length]}
+          >
+            <div className="mb-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setAllPosts(true)}>
+                Select all
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setAllPosts(false)}>
+                Clear
+              </Button>
+            </div>
+            <ItemList>
+              {data.posts.map((p, i) => (
+                <ItemRow
+                  key={p.externalId}
+                  checked={review.posts[i]}
+                  onChange={(on) => toggleItem('posts', i, on)}
+                  title={postLabel(p)}
+                  meta={[
+                    formatDate(p.postedAt),
+                    p.kind === 'article' ? 'Article' : null,
+                    p.connectionsOnly ? 'Shared with connections only on LinkedIn' : null,
+                    p.sharedUrl ? `Links to ${hostOf(p.sharedUrl)}` : null,
+                    p.hasMedia ? 'Has a photo or video (shown on LinkedIn only)' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  body={p.title || p.body.includes('\n') || p.body.length > 90 ? p.body : null}
+                />
+              ))}
+            </ItemList>
+          </ReviewSection>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -502,7 +593,17 @@ export function LinkedInImportFlow({ existing }: { existing: ExistingProfile }) 
           <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
             {nothingChosen
               ? 'Nothing is selected yet.'
-              : `${sectionCount} section${sectionCount === 1 ? '' : 's'} will replace what is on your profile now. Students see the change straight away.`}
+              : [
+                  hasProfile
+                    ? `${sectionCount} section${sectionCount === 1 ? '' : 's'} will replace what is on your profile now.`
+                    : null,
+                  posts.length
+                    ? `${posts.length} post${posts.length === 1 ? '' : 's'} will be added; importing them again updates rather than duplicates.`
+                    : null,
+                  'Students see the change straight away.',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
           </p>
           <Button className="w-full" onClick={publish} disabled={publishing || nothingChosen}>
             {publishing ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
@@ -549,9 +650,10 @@ function UploadStep({
             </a>
           </li>
           <li>
-            Choose <span className="font-medium">Want something in particular?</span> and tick the profile items:
-            Profile, Positions, Education, Skills, Certifications and Projects (whichever are listed). You can leave
-            Messages and Connections unticked.
+            For your profile, choose <span className="font-medium">Want something in particular?</span> and tick
+            Profile, Positions, Education, Skills, Certifications and Projects (whichever are listed). To bring your
+            posts and articles too, choose the <span className="font-medium">larger data archive</span> instead: it is
+            the one that includes them.
           </li>
           <li>
             Click <span className="font-medium">Request archive</span>. LinkedIn usually emails a download link within
@@ -612,10 +714,11 @@ function UploadStep({
         <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
           <li>The file is read in this browser. It is never uploaded to our server.</li>
           <li>
-            Only six files are opened: Profile, Positions, Education, Skills, Certifications and Projects. Your
-            messages, connections, contacts, address and birth date are never read.
+            Only your profile files (Profile, Positions, Education, Skills, Certifications, Projects) and your own
+            posts and articles are opened. Your messages, connections, contacts, address and birth date are never
+            read.
           </li>
-          <li>Nothing is published until you tick it on the next screen and press Publish.</li>
+          <li>Nothing is published until you tick it on the next screen and press Publish. Posts start unticked.</li>
           <li>You can remove imported details from your profile page at any time.</li>
         </ul>
       </Card>
