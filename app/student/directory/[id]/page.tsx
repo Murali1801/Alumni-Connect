@@ -12,12 +12,13 @@ import {
 } from 'lucide-react';
 import { requireUser } from '@/lib/session';
 import { getNavBadges } from '@/lib/badges';
-import { getAlumniRecord, getCareerHistory, getStudentProfile } from '@/lib/queries';
+import { getAlumniPosts, getAlumniRecord, getCareerHistory, getStudentProfile } from '@/lib/queries';
 import { scoreMatch } from '@/lib/matching';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { RequestDialog } from '@/components/directory/request-dialog';
 import { CareerHistoryCard } from '@/components/profile/career-history';
+import { PostsCard } from '@/components/posts/posts-card';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,13 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
   if (!record) notFound();
 
   const alumniProfile = record.alumni_profiles;
-  const history = alumniProfile?.user_id ? await getCareerHistory(alumniProfile.user_id) : null;
+  const [history, posts] = alumniProfile?.user_id
+    ? await Promise.all([
+        getCareerHistory(alumniProfile.user_id),
+        // Students see posts only from verified alumni, as in the feed.
+        record.claim_status === 'verified' ? getAlumniPosts(alumniProfile.user_id, 10) : Promise.resolve([]),
+      ])
+    : [null, []];
   const match = profile
     ? scoreMatch(profile, record, 'mentorship')
     : {
@@ -163,6 +170,7 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
           </Card>
 
           <CareerHistoryCard history={history} />
+          <PostsCard posts={posts} />
 
           {/* Match breakdown */}
           <Card className="gap-0 p-6">
