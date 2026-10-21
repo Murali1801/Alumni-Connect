@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { scoreMatch, type MatchResult } from '@/lib/matching';
+import type { Certification, Education, Position, Project } from '@/lib/linkedin/export';
 
 /* ------------------------------------------------------------------ */
 /* Shared row shapes                                                   */
@@ -260,6 +261,43 @@ export async function getAlumniProfile(userId: string) {
     .maybeSingle();
   if (!data) return null;
   return { ...data, current_company: one((data as any).current_company) };
+}
+
+export type CareerHistory = {
+  headline: string | null;
+  websites: string[];
+  positions: Position[];
+  education: Education[];
+  certifications: Certification[];
+  projects: Project[];
+  profile_source: 'manual' | 'linkedin_export';
+  linkedin_imported_at: string | null;
+};
+
+/**
+ * The LinkedIn-imported part of a profile. Read separately from the directory
+ * columns so the directory keeps working on a database that has not had
+ * 0002_linkedin_profile.sql applied yet: here a missing column just means
+ * "no history".
+ */
+export async function getCareerHistory(userId: string): Promise<CareerHistory | null> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from('alumni_profiles')
+    .select('headline, websites, positions, education, certifications, projects, profile_source, linkedin_imported_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    headline: data.headline ?? null,
+    websites: data.websites ?? [],
+    positions: (data.positions as Position[]) ?? [],
+    education: (data.education as Education[]) ?? [],
+    certifications: (data.certifications as Certification[]) ?? [],
+    projects: (data.projects as Project[]) ?? [],
+    profile_source: data.profile_source ?? 'manual',
+    linkedin_imported_at: data.linkedin_imported_at ?? null,
+  };
 }
 
 /* ------------------------------------------------------------------ */
