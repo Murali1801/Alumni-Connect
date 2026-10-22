@@ -74,7 +74,7 @@ export function RegisterForm() {
       }
 
       toast.success(`Welcome, ${fullName.trim().split(' ')[0]}.`);
-      router.push('/student');
+      router.push('/student/home');
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);

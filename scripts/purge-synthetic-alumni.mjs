@@ -4,7 +4,9 @@
  * What it removes:
  *   - alumni_records with student_id 'SYNTH_*' and their alumni_profiles
  *   - the auth user behind each, which cascades to its users row and to any
- *     requests, opportunities, messages and engagement events involving it
+ *     requests, opportunities, posts, likes, comments and engagement events
+ *     involving it
+ *   - the photos those accounts' posts stored in the post-images bucket
  *   - audit_log rows those accounts wrote (that table does not cascade)
  *
  *   node scripts/purge-synthetic-alumni.mjs           # dry run, prints the plan
@@ -63,6 +65,15 @@ async function main() {
     return;
   }
 
+  // Post photos: their rows cascade with the accounts, but the stored files do not.
+  for (const ids of chunks(userIds, 100)) {
+    const { data: withPhotos } = await db.from('posts').select('image_path').in('author_id', ids).not('image_path', 'is', null);
+    const paths = (withPhotos ?? []).map((p) => p.image_path);
+    if (paths.length) {
+      const { error } = await db.storage.from('post-images').remove(paths);
+      if (error) throw new Error(`post-images: ${error.message}`);
+    }
+  }
   for (const ids of chunks(recordIds)) {
     const { error: pe } = await db.from('alumni_profiles').delete().in('record_id', ids);
     if (pe) throw new Error(`alumni_profiles: ${pe.message}`);

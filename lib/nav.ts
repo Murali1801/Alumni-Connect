@@ -1,4 +1,5 @@
 import {
+  Home,
   LayoutDashboard,
   Users,
   Inbox,
@@ -50,6 +51,7 @@ export const NAV: Record<Role, NavGroup[]> = {
     {
       label: 'Workspace',
       items: [
+        { label: 'Home', href: '/student/home', icon: Home },
         { label: 'Dashboard', href: '/student', icon: LayoutDashboard, exact: true },
         { label: 'Alumni Directory', href: '/student/directory', icon: Users },
         { label: 'My Requests', href: '/student/requests', icon: Inbox, badgeKey: 'pendingRequests' },
@@ -82,6 +84,7 @@ export const NAV: Record<Role, NavGroup[]> = {
     {
       label: 'Workspace',
       items: [
+        { label: 'Home', href: '/alumni/home', icon: Home },
         { label: 'Dashboard', href: '/alumni', icon: LayoutDashboard, exact: true },
         { label: 'Request Inbox', href: '/alumni/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/alumni/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },

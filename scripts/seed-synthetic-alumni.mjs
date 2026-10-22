@@ -196,7 +196,7 @@ const BIOS = [
 
 // Placement-sheet entries that are not employers.
 const NOT_AN_EMPLOYER =
-  /family business|^business$|own business|self employed|freelanc|higher studies|placement|not interested|got married|college|institute|squad|govt/i;
+  /family business|^business$|own business|self employed|freelanc|higher studies|plac(e)?ments?|available for|not interested|got married|college|institute|squad|govt|iskcon/i;
 
 // First roles as the placement sheet wrote them: expand the common codes, tidy
 // shouting, and drop what cannot be read as a role.

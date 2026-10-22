@@ -51,7 +51,7 @@
   --sidebar-border: oklch(0.92 0.005 264);
   --sidebar-ring: oklch(0.48 0.2 264);
 
-  /* Brand gradient — display type and hero accents only */
+  /* Brand accents (solid fills only; the product uses no gradients) */
   --brand-1: #4285f4;
   --brand-2: #9b72cb;
   --brand-3: #d96570;
@@ -174,11 +174,9 @@
     letter-spacing: -0.01em;
   }
 
+  /* Kept as a name for the accent text; solid since the product uses no gradients. */
   .text-gradient {
-    background-image: linear-gradient(90deg, var(--brand-1), var(--brand-2), var(--brand-3));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--primary);
   }
 
   /* Dashed grid backdrop, masked so it fades toward the edges */
@@ -190,14 +188,13 @@
       linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     background-size: 20px 20px;
+    /* Dashes the grid lines; hard stops only, no fade. */
     -webkit-mask-image:
       repeating-linear-gradient(to right, black 0 3px, transparent 3px 8px),
-      repeating-linear-gradient(to bottom, black 0 3px, transparent 3px 8px),
-      radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+      repeating-linear-gradient(to bottom, black 0 3px, transparent 3px 8px);
     mask-image:
       repeating-linear-gradient(to right, black 0 3px, transparent 3px 8px),
-      repeating-linear-gradient(to bottom, black 0 3px, transparent 3px 8px),
-      radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+      repeating-linear-gradient(to bottom, black 0 3px, transparent 3px 8px);
     -webkit-mask-composite: source-in;
     mask-composite: intersect;
   }
@@ -262,4 +259,12 @@
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+/* Scrolls with the wheel, touch and keyboard, but draws no bar. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

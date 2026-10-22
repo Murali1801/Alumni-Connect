@@ -37,19 +37,16 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-screen overflow-y-auto border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out',
+        'fixed left-0 top-0 h-screen overflow-y-auto scrollbar-none border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out',
         isCollapsed ? 'w-16' : 'w-60'
       )}
     >
       <div className={cn('p-4', isCollapsed && 'px-2')}>
         <div className={cn('mb-6 flex items-center', isCollapsed ? 'justify-center' : 'justify-between')}>
           {!isCollapsed && (
-            <Link href={`/${role}`} className="flex items-center gap-2">
+            <Link href={role === 'admin' ? '/admin' : `/${role}/home`} className="flex items-center gap-2">
               <span
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white"
-                style={{
-                  backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))',
-                }}
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold bg-primary text-primary-foreground"
               >
                 AB
               </span>

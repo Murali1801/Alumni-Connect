@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/student') ||
     pathname.startsWith('/alumni') ||
     pathname.startsWith('/admin') ||
+    pathname.startsWith('/posts') ||
     pathname.startsWith('/call');
 
   // Role enforcement itself lives in `requireUser` on each page — the middleware
