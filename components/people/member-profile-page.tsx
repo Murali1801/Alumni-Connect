@@ -120,7 +120,7 @@ export async function MemberProfilePage({
             </div>
             <div className="px-5 pb-5">
               <div className="-mt-12 flex items-end justify-between gap-3 sm:-mt-16">
-                <span className="relative rounded-full ring-4 ring-card">
+                <span className="relative rounded-[30%] ring-4 ring-card">
                   <MemberAvatar name={person.full_name} url={person.avatar_url} size="xl" className="sm:size-32 sm:text-3xl" />
                   {editable && <PhotoButton kind="avatar" hasPhoto={!!person.avatar_url} className="absolute -bottom-1 -right-1" />}
                 </span>

@@ -173,11 +173,11 @@ export function MemberShell({
                 href={i.href}
                 aria-current={active(i.href) ? 'page' : undefined}
                 className={cn(
-                  'relative flex h-14 min-w-16 flex-col items-center justify-center gap-0.5 border-b-2 px-2 text-muted-foreground transition-colors hover:text-foreground',
-                  active(i.href) ? 'border-foreground text-foreground' : 'border-transparent'
+                  'group relative flex h-14 min-w-16 flex-col items-center justify-center gap-0.5 px-1.5 text-muted-foreground transition-colors hover:text-foreground',
+                  active(i.href) && 'text-primary hover:text-primary'
                 )}
               >
-                <span className="relative">
+                <span className={cn('relative rounded-lg px-3 py-1 transition-colors group-hover:bg-muted', active(i.href) && 'bg-primary/10 group-hover:bg-primary/10')}>
                   <i.icon className="size-5" />
                   <Count n={i.count} />
                 </span>
@@ -213,7 +213,7 @@ export function MemberShell({
             aria-current={active(i.href) ? 'page' : undefined}
             className={cn(
               'relative flex h-14 flex-col items-center justify-center gap-0.5 text-muted-foreground',
-              active(i.href) && 'text-foreground'
+              active(i.href) && 'text-primary'
             )}
           >
             <span className="relative">

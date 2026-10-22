@@ -20,7 +20,7 @@ export function ProfileCard({ user, home }: { user: SessionUser; home: HomeConte
           className="h-16 bg-primary/15"
         />
         <div className="px-4 pb-4">
-          <Link href={home.selfHref} className="-mt-9 inline-block rounded-full ring-4 ring-card">
+          <Link href={home.selfHref} className="-mt-9 inline-block rounded-[30%] ring-4 ring-card">
             <MemberAvatar name={user.full_name} url={home.avatar_url} size="xl" />
           </Link>
           <Link href={home.selfHref} className="mt-2 block">

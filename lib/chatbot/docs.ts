@@ -7,9 +7,7 @@
  * the fallback when the table cannot be read, so the two must stay one list:
  * edit here, then re-run the seed.
  *
- * `url` may contain {role}, filled in with the reader's role. The interview and
- * learning docs follow migrations 0009 and 0010; their pages were still being
- * built when these were written, so check the links when they ship.
+ * `url` may contain {role}, filled in with the reader's role.
  */
 import { FACTS, type Fact } from './facts';
 
@@ -152,7 +150,7 @@ export const PRODUCT_DOCS: KnowledgeDoc[] = [
     id: 'guide-interviews-proctoring',
     title: 'Interviews: rounds, scorecards and decisions',
     source: 'guide',
-    url: null,
+    url: '/{role}/interviews',
     roles: MEMBERS,
     keywords: ['interview', 'interviews', 'round', 'rounds', 'coding round', 'mcq', 'scorecard', 'decision', 'reschedule', 'screening', 'pipeline'],
     body:
@@ -162,7 +160,7 @@ export const PRODUCT_DOCS: KnowledgeDoc[] = [
     id: 'guide-proctoring',
     title: 'Proctored interview rounds',
     source: 'guide',
-    url: null,
+    url: '/{role}/interviews',
     roles: MEMBERS,
     keywords: ['proctoring', 'proctored', 'integrity', 'cheating', 'tab switch', 'fullscreen', 'camera', 'consent'],
     body:
@@ -184,7 +182,7 @@ export const PRODUCT_DOCS: KnowledgeDoc[] = [
     id: 'guide-learning-authoring',
     title: 'Writing a course for students',
     source: 'guide',
-    url: null,
+    url: '/alumni/learning',
     roles: ['alumni', 'admin'],
     keywords: ['learning', 'course', 'courses', 'write course', 'create course', 'publish course', 'lesson', 'module', 'quiz', 'training'],
     body:
@@ -194,7 +192,7 @@ export const PRODUCT_DOCS: KnowledgeDoc[] = [
     id: 'guide-learning-workshops',
     title: 'Live workshops',
     source: 'guide',
-    url: null,
+    url: '/{role}/learning',
     roles: MEMBERS,
     keywords: ['workshop', 'workshops', 'webinar', 'live session', 'rsvp', 'event', 'seats'],
     body:

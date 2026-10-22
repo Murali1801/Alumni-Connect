@@ -119,7 +119,7 @@ export async function NetworkPage({ user, tab }: { user: SessionUser; tab: Tab }
                       <Card className="h-full gap-0 overflow-hidden py-0">
                         <div className="h-12 bg-muted" />
                         <div className="flex h-full flex-col items-center px-4 pb-4 text-center">
-                          <Link href={`${people}/${p.id}`} className="-mt-8 rounded-full ring-4 ring-card">
+                          <Link href={`${people}/${p.id}`} className="-mt-8 rounded-[30%] ring-4 ring-card">
                             <MemberAvatar name={p.full_name} url={p.avatar_url} size="xl" />
                           </Link>
                           <Link href={`${people}/${p.id}`} className="mt-2 line-clamp-1 text-sm font-semibold text-foreground hover:underline">

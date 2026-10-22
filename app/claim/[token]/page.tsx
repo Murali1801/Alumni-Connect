@@ -46,7 +46,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
               It may have already been used, or the link may be incomplete. If you believe the record
               is yours, contact the placement cell and they can reissue the invitation.
             </p>
-            <Button className="mt-6" render={<Link href="/" />}>
+            <Button className="mt-6" render={<Link href="/login" />}>
               Back to sign in
             </Button>
           </Card>

@@ -217,7 +217,7 @@ export function InitialsAvatar({
     <span
       aria-hidden
       className={cn(
-        'inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold ring-1 ring-inset ring-foreground/10',
+        'inline-flex shrink-0 select-none items-center justify-center rounded-[30%] font-semibold ring-1 ring-inset ring-foreground/10',
         AVATAR_SIZES[size],
         className
       )}
@@ -250,7 +250,7 @@ export function MemberAvatar({
       src={url}
       alt=""
       loading="lazy"
-      className={cn('shrink-0 rounded-full object-cover ring-1 ring-inset ring-foreground/10', AVATAR_SIZES[size], className)}
+      className={cn('shrink-0 rounded-[30%] object-cover ring-1 ring-inset ring-foreground/10', AVATAR_SIZES[size], className)}
     />
   );
 }
