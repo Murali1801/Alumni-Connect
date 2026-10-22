@@ -14,10 +14,22 @@ export type SessionUser = {
   created_at: string;
 };
 
+/**
+ * A `next` destination carried through sign-in, such as a shared post link.
+ * Only in-app member paths are accepted, so the parameter can never send
+ * someone to another site ("//evil.example", "/\\evil.example") or a loop.
+ */
+export function safeNext(next: string | string[] | undefined | null): string | null {
+  const value = Array.isArray(next) ? next[0] : next;
+  if (!value || !/^\/(posts|student|alumni|admin|call)(\/|$|\?)/.test(value)) return null;
+  if (value.startsWith('//') || value.includes('\\')) return null;
+  return value;
+}
+
 /** Landing route for each role. */
 export const HOME_FOR: Record<Role, string> = {
-  student: '/student',
-  alumni: '/alumni',
+  student: '/student/home',
+  alumni: '/alumni/home',
   admin: '/admin',
 };
 

@@ -24,8 +24,7 @@ export default async function RegisterPage() {
       <main className="relative z-10 w-full max-w-lg">
         <Link href="/" className="mb-6 flex items-center justify-center gap-2.5">
           <span
-            className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold text-white"
-            style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
+            className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground"
           >
             AB
           </span>

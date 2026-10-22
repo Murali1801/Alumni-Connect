@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { GraduationCap, Users, ShieldCheck, Video } from 'lucide-react';
-import { getSessionUser, HOME_FOR } from '@/lib/session';
+import { getSessionUser, HOME_FOR, safeNext } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { LoginForm } from '@/components/auth/login-form';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -15,10 +15,12 @@ const ROLE_NOTES = [
   { icon: ShieldCheck, label: 'Administrators', body: 'Verify claims, watch coverage, export for the cell.' },
 ];
 
-export default async function SignInPage() {
-  // Anyone already signed in goes straight to their own workspace.
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  // Anyone already signed in goes straight to their own workspace, or to the
+  // link they were opening.
+  const next = safeNext((await searchParams).next);
   const user = await getSessionUser();
-  if (user) redirect(HOME_FOR[user.role]);
+  if (user) redirect(next ?? HOME_FOR[user.role]);
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 sm:px-6">
@@ -34,8 +36,7 @@ export default async function SignInPage() {
           <div className="relative hidden w-1/2 flex-col justify-between bg-muted p-10 md:flex">
             <Link href="/" className="relative z-10 flex items-center gap-2.5">
               <span
-                className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold text-white"
-                style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
+                className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground"
               >
                 AB
               </span>
@@ -76,8 +77,7 @@ export default async function SignInPage() {
             <div className="mb-8 flex flex-col items-center gap-2 md:hidden">
               <Link href="/" className="flex items-center gap-2">
                 <span
-                  className="inline-flex size-7 items-center justify-center rounded-lg text-[11px] font-bold text-white"
-                  style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
+                  className="inline-flex size-7 items-center justify-center rounded-lg text-[11px] font-bold bg-primary text-primary-foreground"
                 >
                   AB
                 </span>
@@ -85,7 +85,7 @@ export default async function SignInPage() {
               </Link>
             </div>
 
-            <LoginForm />
+            <LoginForm next={next} />
           </div>
         </Card>
 

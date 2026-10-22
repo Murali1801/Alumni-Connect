@@ -110,6 +110,21 @@ export function formatRelativeDay(value: Input): string {
   return formatDate(d);
 }
 
+/**
+ * now / 5m / 3h / 2d / 3w, then the date — for feed posts. It reads the clock,
+ * so render it in server components only: the browser would compute it later
+ * and React would report a hydration mismatch.
+ */
+export function formatTimeAgo(value: Input): string {
+  const minutes = Math.floor((Date.now() - toDate(value).getTime()) / 60_000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}h`;
+  if (minutes < 60 * 24 * 7) return `${Math.floor(minutes / (60 * 24))}d`;
+  if (minutes < 60 * 24 * 28) return `${Math.floor(minutes / (60 * 24 * 7))}w`;
+  return formatDate(value);
+}
+
 /** Thousands separators, pinned for the same reason. */
 export function formatNumber(value: number): string {
   return value.toLocaleString(LOCALE);

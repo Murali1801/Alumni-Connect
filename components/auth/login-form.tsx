@@ -18,7 +18,8 @@ const DEMO_ACCOUNTS = [
 
 const DEMO_PASSWORD = 'password123';
 
-export function LoginForm() {
+/** `next`: an in-app link to return to after sign-in, already checked by safeNext. */
+export function LoginForm({ next }: { next?: string | null }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +41,7 @@ export function LoginForm() {
 
     // The server decides where each role lands; /auth/route reads the role and
     // redirects, so the client does not need to know the mapping.
-    router.push('/auth/route');
+    router.push(next ? `/auth/route?next=${encodeURIComponent(next)}` : '/auth/route');
     router.refresh();
   }
 

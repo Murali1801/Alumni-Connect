@@ -5,10 +5,9 @@ export function BrandMark({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-bold text-white',
+        'inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground',
         className
       )}
-      style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
     >
       AB
     </span>
