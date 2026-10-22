@@ -127,7 +127,7 @@ export function AppShell({
 
       <footer className="border-t border-border">
         <div className="mx-auto flex w-full max-w-[1280px] flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:px-6">
-          <span>© {new Date().getFullYear()} SJCEM Alumni Network</span>
+          <span>© {new Date().getFullYear()} AlumniBridge</span>
           <span>St John College of Engineering and Management</span>
         </div>
       </footer>

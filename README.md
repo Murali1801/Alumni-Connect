@@ -1,4 +1,4 @@
-# SJCEM Alumni Network
+# AlumniBridge
 
 The alumni network for St John College of Engineering and Management — mentorship,
 mock interviews, referrals, placement support and in-browser video sessions.

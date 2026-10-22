@@ -9,8 +9,8 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jet
 
 export const metadata: Metadata = {
   title: {
-    default: 'SJCEM Alumni Network',
-    template: '%s · SJCEM Alumni Network',
+    default: 'AlumniBridge',
+    template: '%s · AlumniBridge',
   },
   description:
     'The official network for students and alumni of St John College of Engineering and Management — mentorship, referrals, placement support and live sessions.',

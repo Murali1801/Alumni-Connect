@@ -35,9 +35,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
             className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold text-white"
             style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
           >
-            SJ
+            AB
           </span>
-          <span className="font-display text-lg">SJCEM Network</span>
+          <span className="font-display text-lg">AlumniBridge</span>
         </Link>
 
         {!record ? (
