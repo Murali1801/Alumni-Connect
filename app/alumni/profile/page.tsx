@@ -1,24 +1,19 @@
 import { requireUser } from '@/lib/session';
 import { getNavBadges } from '@/lib/badges';
-import { getAlumniPosts, getAlumniProfile, getAlumniRecordForUser, getCareerHistory } from '@/lib/queries';
+import { getAlumniProfile, getAlumniRecordForUser } from '@/lib/queries';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { AlumniProfileForm } from '@/components/profile/alumni-profile-form';
 import { InstitutionalRecordCard } from '@/components/profile/institutional-record-card';
-import { LinkedInImportCard } from '@/components/profile/linkedin-import-card';
-import { CareerHistoryCard } from '@/components/profile/career-history';
-import { PostsCard } from '@/components/posts/posts-card';
 
 export const metadata = { title: 'My profile' };
 export const dynamic = 'force-dynamic';
 
 export default async function AlumniProfilePage() {
   const user = await requireUser(['alumni']);
-  const [badges, profile, record, history, posts] = await Promise.all([
+  const [badges, profile, record] = await Promise.all([
     getNavBadges(user),
     getAlumniProfile(user.id),
     getAlumniRecordForUser(user.id),
-    getCareerHistory(user.id),
-    getAlumniPosts(user.id),
   ]);
 
   return (
@@ -29,7 +24,6 @@ export default async function AlumniProfilePage() {
       description="What students see when they find you in the directory."
     >
       <InstitutionalRecordCard record={record} />
-      {profile && <LinkedInImportCard importedAt={history?.linkedin_imported_at ?? null} />}
       <AlumniProfileForm
         initial={{
           current_company: profile?.current_company ?? null,
@@ -46,8 +40,6 @@ export default async function AlumniProfilePage() {
           internship_available: profile?.internship_available ?? false,
         }}
       />
-      <CareerHistoryCard history={history} />
-      {profile && <PostsCard posts={posts} own verified={record?.claim_status === 'verified'} />}
     </DashboardShell>
   );
 }

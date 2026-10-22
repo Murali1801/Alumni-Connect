@@ -1,7 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { scoreMatch, type MatchResult } from '@/lib/matching';
-import type { Certification, Education, Position, Project } from '@/lib/linkedin/export';
 
 /* ------------------------------------------------------------------ */
 /* Shared row shapes                                                   */
@@ -261,119 +260,6 @@ export async function getAlumniProfile(userId: string) {
     .maybeSingle();
   if (!data) return null;
   return { ...data, current_company: one((data as any).current_company) };
-}
-
-export type CareerHistory = {
-  headline: string | null;
-  websites: string[];
-  positions: Position[];
-  education: Education[];
-  certifications: Certification[];
-  projects: Project[];
-  profile_source: 'manual' | 'linkedin_export';
-  linkedin_imported_at: string | null;
-};
-
-/**
- * The LinkedIn-imported part of a profile. Read separately from the directory
- * columns so the directory keeps working on a database that has not had
- * 0002_linkedin_profile.sql applied yet: here a missing column just means
- * "no history".
- */
-export async function getCareerHistory(userId: string): Promise<CareerHistory | null> {
-  const db = createAdminClient();
-  const { data, error } = await db
-    .from('alumni_profiles')
-    .select('headline, websites, positions, education, certifications, projects, profile_source, linkedin_imported_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return {
-    headline: data.headline ?? null,
-    websites: data.websites ?? [],
-    positions: (data.positions as Position[]) ?? [],
-    education: (data.education as Education[]) ?? [],
-    certifications: (data.certifications as Certification[]) ?? [],
-    projects: (data.projects as Project[]) ?? [],
-    profile_source: data.profile_source ?? 'manual',
-    linkedin_imported_at: data.linkedin_imported_at ?? null,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Posts                                                               */
-/* ------------------------------------------------------------------ */
-
-export type PostRow = {
-  id: string;
-  user_id: string;
-  kind: 'post' | 'article';
-  title: string | null;
-  body: string;
-  linkedin_url: string | null;
-  shared_url: string | null;
-  has_media: boolean;
-  posted_at: string;
-};
-
-export type FeedItem = PostRow & {
-  record_id: string;
-  full_name: string;
-  branch: string;
-  batch_year: number;
-  designation: string | null;
-  company_name: string | null;
-};
-
-const POST_COLUMNS = 'id, user_id, kind, title, body, linkedin_url, shared_url, has_media, posted_at';
-
-/**
- * One alumnus' posts, newest first. Callers decide whether the viewer may see
- * them (the author always; others only once the record is verified). Reads as
- * "no posts" on a database without 0003_alumni_posts.sql.
- */
-export async function getAlumniPosts(userId: string, limit = 50): Promise<PostRow[]> {
-  const db = createAdminClient();
-  const { data, error } = await db
-    .from('alumni_posts')
-    .select(POST_COLUMNS)
-    .eq('user_id', userId)
-    .order('posted_at', { ascending: false })
-    .limit(limit);
-  if (error || !data) return [];
-  return data as PostRow[];
-}
-
-export type FeedPage = { items: FeedItem[]; next: string | null };
-
-/** "<posted_at>_<id>": stable paging even when two posts share a timestamp. */
-export function parseFeedCursor(cursor: string | undefined): { postedAt: string; id: string } | null {
-  const m = (cursor ?? '').match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))_([0-9a-f-]{36})$/i);
-  return m ? { postedAt: m[1], id: m[2] } : null;
-}
-
-/** The network feed: posts by verified alumni, newest first. */
-export async function getFeed({ cursor, limit = 20 }: { cursor?: string; limit?: number }): Promise<FeedPage> {
-  const db = createAdminClient();
-  let query = db
-    .from('alumni_feed')
-    .select(`${POST_COLUMNS}, record_id, full_name, branch, batch_year, designation, company_name`)
-    .order('posted_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit + 1);
-
-  const after = parseFeedCursor(cursor);
-  if (after) {
-    // Quoted: timestamps carry dots, colons and "+", which the or() syntax would misread.
-    const t = `"${after.postedAt}"`;
-    query = query.or(`posted_at.lt.${t},and(posted_at.eq.${t},id.lt.${after.id})`);
-  }
-
-  const { data, error } = await query;
-  if (error || !data) return { items: [], next: null };
-  const items = (data as FeedItem[]).slice(0, limit);
-  const last = items[items.length - 1];
-  return { items, next: data.length > limit && last ? `${last.posted_at}_${last.id}` : null };
 }
 
 /* ------------------------------------------------------------------ */
