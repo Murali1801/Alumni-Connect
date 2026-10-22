@@ -324,7 +324,7 @@ export async function getAllRequests(limit = 200): Promise<RequestRow[]> {
 export type OpportunityRow = {
   id: string;
   posted_by: string;
-  type: 'internship' | 'job';
+  type: 'internship' | 'job' | 'placement' | 'referral';
   title: string;
   description: string;
   company_id: string | null;
@@ -333,13 +333,19 @@ export type OpportunityRow = {
   application_link: string | null;
   is_open: boolean;
   created_at: string;
+  work_mode: 'onsite' | 'hybrid' | 'remote' | null;
+  experience: string | null;
+  compensation: string | null;
+  duration: string | null;
+  deadline: string | null;
+  eligibility: string | null;
   company: { id: string; name: string } | null;
   poster: { id: string; full_name: string } | null;
 };
 
 const OPPORTUNITY_COLUMNS = `
   id, posted_by, type, title, description, company_id, location, target_skills,
-  application_link, is_open, created_at,
+  application_link, is_open, created_at, work_mode, experience, compensation, duration, deadline, eligibility,
   company:companies!company_id ( id, name ),
   poster:users!posted_by ( id, full_name )
 `;

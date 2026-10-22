@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { ArrowDown, Newspaper } from 'lucide-react';
+import { ArrowDown, Hash, Newspaper, X } from 'lucide-react';
 import { getNavBadges } from '@/lib/badges';
-import { getFeed } from '@/lib/posts';
+import { getFeed, type FeedFilter } from '@/lib/posts';
 import { getHomeContext } from '@/lib/home';
 import type { SessionUser } from '@/lib/session';
 import { DashboardShell } from '@/components/dashboard/shell';
@@ -10,11 +10,25 @@ import { EmptyState } from '@/components/patterns';
 import { Composer } from '@/components/feed/composer';
 import { PostCard } from '@/components/feed/post-card';
 import { HomeRail, ProfileCard } from '@/components/feed/home-columns';
+import { cn } from '@/lib/utils';
+
+const FILTERS: { key: FeedFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'opportunities', label: 'Openings' },
+  { key: 'job', label: 'Jobs' },
+  { key: 'internship', label: 'Internships' },
+  { key: 'placement', label: 'Placement drives' },
+  { key: 'referral', label: 'Referrals' },
+  { key: 'saved', label: 'Saved' },
+];
+
+const isFilter = (v: string | undefined): v is FeedFilter => FILTERS.some((f) => f.key === v);
 
 /**
  * The Home page students and alumni land on: profile card on the left, the
  * composer and feed in the middle, people and opportunities on the right.
- * `?mine=1` narrows the feed to the viewer's own posts; `?before=` pages it.
+ * `?show=` filters the feed (openings by kind, or saved posts), `?tag=` narrows
+ * it to a hashtag, `?mine=1` to the viewer's own posts; `?before=` pages it.
  */
 export async function HomePage({
   user,
@@ -23,57 +37,80 @@ export async function HomePage({
 }: {
   user: SessionUser;
   basePath: '/student/home' | '/alumni/home';
-  searchParams: { before?: string; mine?: string };
+  searchParams: { before?: string; mine?: string; show?: string; tag?: string };
 }) {
   const mine = searchParams.mine === '1';
+  const show: FeedFilter = isFilter(searchParams.show) ? searchParams.show : 'all';
+  const tag = searchParams.tag?.replace(/[^\p{L}\p{N}_]/gu, '').toLowerCase().slice(0, 40) || undefined;
   const [badges, home, feed] = await Promise.all([
     getNavBadges(user),
     getHomeContext(user),
-    getFeed({ viewerId: user.id, cursor: searchParams.before, authorId: mine ? user.id : undefined }),
+    getFeed({ viewerId: user.id, cursor: searchParams.before, authorId: mine ? user.id : undefined, filter: show, tag }),
   ]);
   const prefix = user.role === 'alumni' ? '/alumni' : '/student';
-  // Alumni names come from the college record, "Surname First Father Mother",
-  // so the given name is the second word; students type their own name.
-  const parts = user.full_name.trim().split(/\s+/);
-  const firstName = user.role === 'alumni' && parts.length >= 3 ? parts[1] : parts[0];
-  const query = (extra: Record<string, string>) =>
-    `${basePath}?${new URLSearchParams({ ...(mine ? { mine: '1' } : {}), ...extra })}`;
+  const link = (over: Record<string, string | undefined>) => {
+    const params = { ...(mine ? { mine: '1' } : {}), ...(show !== 'all' ? { show } : {}), ...(tag ? { tag } : {}), ...over };
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
 
   return (
-    <DashboardShell
-      user={user}
-      badges={badges}
-      bare
-      title={`Welcome, ${firstName}`}
-      description="What the SJCEM network is sharing: career moves, advice, openings and questions."
-    >
+    <DashboardShell user={user} badges={badges} bare title="Home" description="Your AlumniBridge feed.">
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_19rem]">
-        <aside className="lg:sticky lg:top-4">
+        <aside className="hidden lg:sticky lg:top-[4.5rem] lg:block">
           <ProfileCard user={user} home={home} />
         </aside>
 
         <section className="min-w-0 space-y-3" aria-label="Feed">
-          <Composer name={user.full_name} />
+          <Composer name={user.full_name} role={user.role} avatarUrl={home.avatar_url} />
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            {mine ? (
-              <>
-                Your posts ·{' '}
-                <Link href={basePath} className="font-medium text-foreground hover:underline">
-                  Show everyone
-                </Link>
-              </>
-            ) : (
-              <>Newest first</>
-            )}
-          </div>
+          <nav className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" aria-label="Filter the feed">
+            {FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={link({ show: f.key === 'all' ? undefined : f.key, before: undefined })}
+                aria-current={show === f.key ? 'page' : undefined}
+                className={cn(
+                  'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  show === f.key ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </nav>
+
+          {(tag || mine) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {tag && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                  <Hash className="size-3" />
+                  {tag}
+                  <Link href={link({ tag: undefined, before: undefined })} aria-label={`Clear #${tag}`} className="ml-0.5 hover:text-foreground">
+                    <X className="size-3" />
+                  </Link>
+                </span>
+              )}
+              {mine && (
+                <span>
+                  Your posts ·{' '}
+                  <Link href={link({ mine: undefined, before: undefined })} className="font-medium text-foreground hover:underline">
+                    Show everyone
+                  </Link>
+                </span>
+              )}
+            </div>
+          )}
 
           {feed.items.length === 0 ? (
             <EmptyState
               icon={Newspaper}
-              title={mine ? 'You have not posted yet' : 'No posts yet'}
-              description="Share a career update, a question, or an opening at your company. It shows up here for everyone on the network."
+              title={show === 'saved' ? 'Nothing saved yet' : mine ? 'You have not posted yet' : 'Nothing here yet'}
+              description={
+                show === 'saved'
+                  ? 'Use the bookmark on any post to keep it here for later.'
+                  : 'Share a career update, a question, or an opening at your company. It shows up here for everyone on the network.'
+              }
             />
           ) : (
             feed.items.map((post) => <PostCard key={post.id} post={post} viewer={user} />)
@@ -81,7 +118,7 @@ export async function HomePage({
 
           {feed.next && (
             <div className="flex justify-center pt-1">
-              <Button variant="outline" render={<Link href={query({ before: feed.next })} />}>
+              <Button variant="outline" render={<Link href={link({ before: feed.next })} />}>
                 <ArrowDown className="size-4" />
                 Older posts
               </Button>
@@ -89,7 +126,7 @@ export async function HomePage({
           )}
         </section>
 
-        <aside className="lg:col-span-2 xl:col-span-1 xl:sticky xl:top-4">
+        <aside className="lg:col-span-2 xl:sticky xl:top-[4.5rem] xl:col-span-1">
           <HomeRail home={home} opportunitiesHref={`${prefix}/opportunities`} calendarHref={`${prefix}/calendar`} />
         </aside>
       </div>

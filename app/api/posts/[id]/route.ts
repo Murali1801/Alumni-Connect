@@ -5,14 +5,22 @@ import { POST_IMAGE_BUCKET } from '@/lib/posts';
 
 export const dynamic = 'force-dynamic';
 
-/** Delete a post. Its author can; so can an administrator. Likes and comments go with it. */
+/**
+ * Delete a post. Its author can; so can an administrator. Reactions, comments
+ * and reposts go with it, and so does the listing an opening post created, so
+ * it does not linger on the Jobs page.
+ */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const db = createAdminClient();
-  const { data: post } = await db.from('posts').select('id, author_id, image_path').eq('id', id).maybeSingle();
+  const { data: post } = await db
+    .from('posts')
+    .select('id, author_id, image_path, opportunity_id')
+    .eq('id', id)
+    .maybeSingle();
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
   if (post.author_id !== auth.user.id && auth.user.role !== 'admin') {
     return NextResponse.json({ error: 'You can only delete your own posts.' }, { status: 403 });
@@ -21,6 +29,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { error } = await db.from('posts').delete().eq('id', id);
   if (error) return NextResponse.json({ error: 'Could not delete the post.' }, { status: 500 });
   if (post.image_path) await db.storage.from(POST_IMAGE_BUCKET).remove([post.image_path]);
+  if (post.opportunity_id) await db.from('opportunities').delete().eq('id', post.opportunity_id).eq('posted_by', post.author_id);
 
   return NextResponse.json({ success: true });
 }

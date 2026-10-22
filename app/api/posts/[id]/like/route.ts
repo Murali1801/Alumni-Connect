@@ -1,20 +1,26 @@
 import { NextResponse } from 'next/server';
 import { requireApiUser } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { REACTIONS, type Reaction } from '@/lib/posts';
 
 export const dynamic = 'force-dynamic';
 
-async function likeCount(postId: string) {
+async function counts(postId: string) {
   const db = createAdminClient();
-  const { count } = await db.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('post_id', postId);
-  return count ?? 0;
+  const { data } = await db.from('post_likes').select('reaction').eq('post_id', postId).limit(5000);
+  const byReaction: Partial<Record<Reaction, number>> = {};
+  for (const r of data ?? []) byReaction[r.reaction as Reaction] = (byReaction[r.reaction as Reaction] ?? 0) + 1;
+  return { like_count: data?.length ?? 0, reaction_counts: byReaction };
 }
 
-/** Like a post. Liking twice is a no-op. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+/** React to a post (`{ reaction }`, default like). Reacting again changes the reaction. */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
   const { id } = await params;
+
+  const body = await request.json().catch(() => ({}));
+  const reaction: Reaction = REACTIONS.includes(body?.reaction) ? body.reaction : 'like';
 
   const db = createAdminClient();
   const { data: post } = await db.from('posts').select('id').eq('id', id).maybeSingle();
@@ -22,13 +28,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { error } = await db
     .from('post_likes')
-    .upsert({ post_id: id, user_id: auth.user.id }, { onConflict: 'post_id,user_id', ignoreDuplicates: true });
-  if (error) return NextResponse.json({ error: 'Could not like the post.' }, { status: 500 });
+    .upsert({ post_id: id, user_id: auth.user.id, reaction }, { onConflict: 'post_id,user_id' });
+  if (error) return NextResponse.json({ error: 'Could not react to the post.' }, { status: 500 });
 
-  return NextResponse.json({ liked: true, like_count: await likeCount(id) });
+  return NextResponse.json({ my_reaction: reaction, ...(await counts(id)) });
 }
 
-/** Take a like back. */
+/** Take a reaction back. */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
@@ -36,7 +42,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   const db = createAdminClient();
   const { error } = await db.from('post_likes').delete().eq('post_id', id).eq('user_id', auth.user.id);
-  if (error) return NextResponse.json({ error: 'Could not remove the like.' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Could not remove the reaction.' }, { status: 500 });
 
-  return NextResponse.json({ liked: false, like_count: await likeCount(id) });
+  return NextResponse.json({ my_reaction: null, ...(await counts(id)) });
 }

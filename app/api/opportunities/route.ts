@@ -6,7 +6,7 @@ import { z } from 'zod';
 export const dynamic = 'force-dynamic';
 
 const postOpportunitySchema = z.object({
-  type: z.enum(['job', 'internship']),
+  type: z.enum(['job', 'internship', 'placement', 'referral']),
   title: z.string().min(3),
   description: z.string().min(10),
   company_id: z.string().uuid(),

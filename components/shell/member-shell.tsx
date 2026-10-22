@@ -12,6 +12,7 @@ import type { Role } from '@/lib/session';
 import { BrandMark } from '@/components/shell/brand';
 import { InitialsAvatar } from '@/components/patterns';
 import { HelpBot } from '@/components/chat/help-bot';
+import { useLiveNotifications } from '@/components/shell/use-live-notifications';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,7 +74,8 @@ export function MemberShell({
   const [q, setQ] = useState('');
   const [signingOut, startSignOut] = useTransition();
   const { resolvedTheme, setTheme } = useTheme();
-  const items = topNav(user.role, badges);
+  const unreadNotifications = useLiveNotifications(user.id, badges.unreadNotifications ?? 0);
+  const items = topNav(user.role, { ...badges, unreadNotifications });
   const p = `/${user.role}`;
   const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 

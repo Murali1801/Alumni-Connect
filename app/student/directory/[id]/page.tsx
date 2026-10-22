@@ -36,8 +36,16 @@ const REQUEST_TYPES = [
   { value: 'internship', label: 'Internship', field: 'internship_available' },
 ] as const;
 
-export default async function AlumnusDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AlumnusDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ request?: string; about?: string }>;
+}) {
   const { id } = await params;
+  // From an opportunity post: open the request form on that type, about that role.
+  const { request: requestType, about } = await searchParams;
   const user = await requireUser(['student']);
   const [badges, record, profile] = await Promise.all([
     getNavBadges(user),
@@ -215,6 +223,8 @@ export default async function AlumnusDetailPage({ params }: { params: Promise<{ 
 
             {alumniProfile && available.length > 0 ? (
               <RequestDialog
+                initialType={requestType}
+                initialMessage={about ? `About your post for ${about.slice(0, 120)}: ` : undefined}
                 alumniUserId={alumniProfile.user_id}
                 alumniName={record.full_name}
                 matchScore={match.score}

@@ -12,6 +12,8 @@ const TYPES = [
   { value: 'all', label: 'Everything' },
   { value: 'job', label: 'Jobs' },
   { value: 'internship', label: 'Internships' },
+  { value: 'placement', label: 'Placement drives' },
+  { value: 'referral', label: 'Referrals' },
 ];
 
 export function OpportunityFilters({

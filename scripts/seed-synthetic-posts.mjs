@@ -1,16 +1,21 @@
 /**
- * Adds 500 Home-feed posts written by the synthetic alumni, with likes and
- * comments from other synthetic alumni, so the feed has life before real
- * members start posting.
+ * Fills the Home feed with posts by the synthetic alumni: mostly openings
+ * (jobs, internships, placement drives and referrals, each a real listing on
+ * the Jobs page), plus career updates, advice and campus posts, with reactions,
+ * comments and reposts from other synthetic alumni.
  *
- * Every post, like and comment belongs to a synthetic account (the SYNTH_*
- * records from seed-synthetic-alumni.mjs). Deleting those accounts with
- * purge-synthetic-alumni.mjs deletes all of this too; --purge here removes only
- * the posts, likes and comments and keeps the accounts.
+ * Every row belongs to a synthetic account (the SYNTH_* records from
+ * seed-synthetic-alumni.mjs), so purge-synthetic-alumni.mjs removes all of it;
+ * --purge here removes only the posts, listings, reactions, comments and their
+ * notifications, and keeps the accounts.
+ *
+ * Openings never carry application links: links to real companies' careers
+ * sites would be invented, so students respond through AlumniBridge requests or
+ * messages instead.
  *
  *   node scripts/seed-synthetic-posts.mjs           # dry run, prints samples
- *   node scripts/seed-synthetic-posts.mjs --commit  # actually writes
- *   node scripts/seed-synthetic-posts.mjs --purge   # removes synthetic posts, likes, comments
+ *   node scripts/seed-synthetic-posts.mjs --commit  # writes
+ *   node scripts/seed-synthetic-posts.mjs --purge   # removes what this script wrote
  */
 import { createClient } from '@supabase/supabase-js';
 import fs from 'node:fs';
@@ -18,6 +23,7 @@ import fs from 'node:fs';
 const COMMIT = process.argv.includes('--commit');
 const PURGE = process.argv.includes('--purge');
 const COUNT = 500;
+const OPENING_SHARE = 0.7;
 const DAYS = 120;
 
 const env = Object.fromEntries(
@@ -52,8 +58,11 @@ const pickN = (arr, n) => {
 };
 const chance = (p) => rnd() < p;
 const fill = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+const chunks = (arr, n = 200) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const tagOf = (s) => '#' + s.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
 
-/* ------------------------------ post pools ------------------------------- */
+/* ------------------------------ pools ------------------------------------ */
 
 const TOPICS = {
   COMP: ['system design', 'DSA', 'cloud', 'React', 'backend APIs', 'machine learning', 'DevOps', 'open source'],
@@ -62,97 +71,91 @@ const TOPICS = {
   CIVIL: ['site execution', 'structural design', 'project planning', 'quantity surveying', 'AutoCAD', 'STAAD Pro'],
 };
 
-const CERTS = {
-  COMP: ['AWS Certified Solutions Architect – Associate', 'Kubernetes (CKAD)', 'Google Cloud Associate Cloud Engineer', 'Azure Developer Associate'],
-  IT: ['Microsoft Azure Fundamentals', 'CompTIA Security+', 'Power BI Data Analyst', 'AWS Cloud Practitioner'],
-  EXTC: ['ARM Accredited Engineer', 'Cisco CCNA', 'Embedded Linux', 'IoT Fundamentals'],
-  CIVIL: ['Primavera P6', 'PMP', 'Autodesk Revit Certified Professional', 'Green Building (IGBC AP)'],
+const SKILLS = {
+  COMP: ['Java', 'Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Data Structures', 'AWS', 'Docker', 'Spring Boot', 'Git'],
+  IT: ['SQL', 'Python', 'Power BI', 'Excel', 'Azure', 'Linux', 'Networking', 'ServiceNow', 'Tableau'],
+  EXTC: ['Embedded C', 'Microcontrollers', 'IoT', 'MATLAB', 'Verilog', 'PCB Design', 'RTOS', 'Python'],
+  CIVIL: ['AutoCAD', 'STAAD Pro', 'ETABS', 'Estimation', 'Site Supervision', 'MS Project', 'Revit', 'Quantity Surveying'],
 };
 
-// Each kind: templates use {company} {designation} {topic} {years} {branch} {batch} {cert} {city} {first}.
-const KINDS = [
-  {
-    kind: 'career',
-    weight: 14,
-    posts: [
-      "Some personal news: I've started a new role as {designation} at {company}! 🎉\n\nGrateful to everyone who helped along the way, especially the SJCEM {branch} faculty who pushed us to keep building. Looking forward to learning a lot here.",
-      "Happy to share that I've been promoted to {designation} at {company}.\n\n{years} years ago I walked out of SJCEM not knowing much beyond the syllabus. Consistency really does compound. Thank you to my team and mentors.",
-      "Wrapped up my time at {first} and joined {company} as {designation} this week. New city, new team, same habit of asking too many questions. If you're from SJCEM and in {city}, say hi!",
-      "Completed {years} years at {company} today. Started as a fresher, now working as {designation}. To the juniors: the first year is the hardest, don't judge your whole career by it.",
-    ],
-  },
-  {
-    kind: 'advice',
-    weight: 22,
-    posts: [
-      "For SJCEM students preparing for placements in {topic}:\n\n1. Build one project you can explain end to end.\n2. Practise explaining your decisions out loud.\n3. Read the job description and map every line to something you've done.\n\nThe interview is a conversation, not an exam.",
-      "I've taken around 40 interviews this year at {company}. The most common reason freshers don't clear the round isn't knowledge, it's not asking clarifying questions. Ask before you answer.",
-      "Resume tip from someone who screens them: put your strongest project at the top, with one line on the problem, one on what YOU did, and one on the result. Skip the 'objective' section.",
-      "Unpopular opinion: you don't need ten certifications. You need one solid {topic} project and the ability to talk about what went wrong while building it.",
-      "Things I wish I'd known in my final year at SJCEM:\n• Internships matter more than CGPA after your first job\n• Your batchmates are your first network\n• It's okay to switch domains early\n\nWhat would you add?",
-      "If you are a {branch} student wondering whether to go for higher studies or a job first: I worked for {years} years before deciding. Both paths are valid. Happy to talk it through in a mentorship session here.",
-      "Mock interview season! I'm opening a few slots this month for {topic} mock interviews. Request one through my AlumniBridge profile and include the role you're targeting.",
-    ],
-  },
-  {
-    kind: 'hiring',
-    weight: 16,
-    posts: [
-      "We're hiring at {company}! 🚀\n\nLooking for freshers and 0–2 years' experience to join as {designation}s in {city}. If you're from SJCEM, send me a request on AlumniBridge with your resume and I'll refer the strong profiles.",
-      "My team at {company} has two openings for interns this summer ({topic}). Six months, stipend, real project work. Final-year students, check the Opportunities page; I'll post the details there.",
-      "Referral window is open at {company} for {designation}-track roles. I can only refer people whose work I've seen, so share a project link along with your resume.",
-      "Hiring alert: {company} is running a campus drive for {branch} graduates next month. Prepare {topic} basics and aptitude. Ask me anything about the process in the comments.",
-    ],
-  },
-  {
-    kind: 'learning',
-    weight: 14,
-    posts: [
-      "Just cleared the {cert} exam! It took about two months of evenings and weekends. Happy to share my notes with anyone from SJCEM preparing for it.",
-      "This month I went deep into {topic}. Biggest lesson: the fundamentals you think you can skip are exactly the ones production will test you on.",
-      "Gave a talk on {topic} at an internal tech day at {company}. Slides were simple, demo broke once, audience still learned something. Ship it anyway.",
-      "Reading list for anyone getting into {topic}: start with the official docs, build something small, then read other people's code. Tutorials alone won't get you there.",
-    ],
-  },
-  {
-    kind: 'campus',
-    weight: 10,
-    posts: [
-      "Visited the SJCEM campus after {years} years today. The canteen chai is exactly the same, the labs are much better. Nostalgia hit hard. 🏫",
-      "Shoutout to the {branch} department at SJCEM. A project we did in third year ended up being the thing I talked about in my first interview at {first}.",
-      "Class of {batch}, where are you all now? Drop a comment, let's plan a meetup in {city}.",
-      "Met three SJCEM juniors at {company} this week, all doing great work. The network is getting stronger every year. Proud of this community.",
-    ],
-  },
-  {
-    kind: 'project',
-    weight: 12,
-    posts: [
-      "Our team at {company} just shipped a project I've been working on for months, centred on {topic}. Lots of late nights, lots of learning. Big thanks to the team.",
-      "Weekend project: built a small tool around {topic} to automate a boring part of my job. Saved my team a couple of hours a week. Small automations add up.",
-      "CIVIL:Six months ago this site was an empty plot. Today the structure is complete. Proud of the whole crew. {topic} done right is all about planning and communication.",
-      "Wrote up what I learned migrating a legacy system at {company}. Short version: measure first, change one thing at a time, and keep the old path working until you're sure.",
-    ],
-  },
-  {
-    kind: 'question',
-    weight: 12,
-    posts: [
-      "Question for the network: for students starting out in {topic}, what's the one resource you'd recommend? Building a list to share with my mentees.",
-      "Alumni in {city}: is anyone else from SJCEM {branch} working in {topic}? Would love to connect and maybe run a joint session for students.",
-      "What do you think matters more for a fresher in {topic}: a strong internship or a strong personal project? Curious to hear from both students and alumni.",
-    ],
-  },
-];
+const ROLES = {
+  COMP: { job: ['Software Engineer', 'Associate Software Engineer', 'Backend Developer', 'Frontend Developer', 'Data Engineer', 'QA Engineer'], intern: ['Software Engineering Intern', 'Full Stack Intern', 'Data Science Intern', 'Backend Intern'] },
+  IT: { job: ['Systems Engineer', 'Data Analyst', 'Cloud Support Engineer', 'Associate Consultant', 'Business Analyst'], intern: ['Data Analyst Intern', 'Cloud Intern', 'IT Support Intern', 'Business Analyst Intern'] },
+  EXTC: { job: ['Embedded Engineer', 'Graduate Engineer Trainee', 'Network Engineer', 'Test Engineer', 'Firmware Engineer'], intern: ['Embedded Systems Intern', 'IoT Intern', 'Hardware Design Intern', 'Network Intern'] },
+  CIVIL: { job: ['Site Engineer', 'Graduate Engineer Trainee', 'Junior Structural Engineer', 'Billing Engineer', 'Planning Engineer'], intern: ['Site Engineering Intern', 'Structural Design Intern', 'Quantity Surveying Intern', 'Planning Intern'] },
+};
+
+const PAY = {
+  COMP: ['₹4–6 LPA', '₹5–8 LPA', '₹6–9 LPA', '₹3.6–4.5 LPA', '₹7–10 LPA'],
+  IT: ['₹3.5–5 LPA', '₹4–6 LPA', '₹4.5–6.5 LPA', '₹3.25 LPA'],
+  EXTC: ['₹3.5–5 LPA', '₹4–5.5 LPA', '₹3–4 LPA', '₹4.5–6 LPA'],
+  CIVIL: ['₹3–4.2 LPA', '₹3.5–5 LPA', '₹2.8–3.6 LPA', '₹4–5 LPA'],
+};
+const STIPEND = ['₹10,000 / month', '₹15,000 / month', '₹12,000 / month', '₹20,000 / month', '₹8,000 / month', 'Unpaid, with certificate and PPO chance'];
+const DURATION = ['2 months', '3 months', '6 months', '6 months (Jan–Jun)'];
+const EXPERIENCE = ['Freshers', 'Freshers (2025/2026 batch)', '0–1 year', '0–2 years', '1–3 years'];
+const BATCHES = ['2025 and 2026 graduates', '2026 graduates', 'Final-year students (2026 batch)', '2024–2026 graduates'];
+const CGPA = ['CGPA 6.5+', 'CGPA 7.0+', '60% throughout', 'No active backlogs'];
+
+const OPENING_BODIES = {
+  job: [
+    "We're hiring at {company}! 🚀\n\nLooking for {title}s to join my team in {city}. {experience} welcome. If you're from SJCEM, send me a referral request through AlumniBridge with your resume and the projects you're proudest of.\n\n#hiring #jobs {tagBranch}",
+    "Opening on my team at {company}: {title}.\n\nYou'd work on {topic} from week one, with proper mentoring. I'll review every SJCEM request personally, so tell me what you've built.\n\n#hiring {tagTopic} #freshers",
+    "{company} is hiring {title}s ({experience}). Pay is {compensation}. We care more about fundamentals in {topic} than about years of experience.\n\nRequest a referral below and include your GitHub or portfolio. #jobs #referral {tagBranch}",
+  ],
+  internship: [
+    "Internship alert 🎓\n\n{company} is taking {title}s for {duration} in {city}, stipend {compensation}. You'll ship real work in {topic}, and strong interns get a PPO.\n\nFinal-year SJCEM students, ask me about it below. #internship #summerinternship {tagBranch}",
+    "My team at {company} has two {title} seats for {duration}. Stipend: {compensation}. Looking for curiosity and basics in {topic}.\n\n#internship #hiring {tagTopic}",
+  ],
+  placement: [
+    "Campus drive at SJCEM: {company} 🎯\n\nRoles: {title}. Package: {compensation}. Rounds: online aptitude test, technical interview, then HR.\nEligibility: {eligibility}.\n\nRegister before the deadline. I'm an alumnus working there; ask me anything about the process in the comments. #placements #campusdrive {tagBranch}",
+    "{company} is coming to campus for {title} roles ({compensation}).\n\nHow to prepare: revise {topic}, practise aptitude daily, and keep one project you can explain end to end. Eligibility: {eligibility}.\n\n#placements #sjcem",
+  ],
+  referral: [
+    "Referrals open at {company} 🤝\n\nI can refer SJCEM students and alumni for {title} roles. Send a referral request through AlumniBridge with your resume and one line on why this team. I only refer profiles I've reviewed.\n\n#referral #jobs {tagBranch}",
+    "Happy to refer for {title} openings at {company} ({experience}). Requests with a clear resume and a project link get answered first.\n\n#referral #hiring {tagTopic}",
+  ],
+};
+
+const GENERAL = {
+  career: [
+    "Some personal news: I've started a new role as {designation} at {company}! 🎉\n\nGrateful to the SJCEM {branch} faculty who pushed us to keep building. #newjob #careergrowth",
+    "Completed {years} years at {company} today. Started as a fresher, now working as {designation}. To the juniors: the first year is the hardest, don't judge your whole career by it. #workanniversary",
+  ],
+  advice: [
+    "For SJCEM students preparing for placements in {topic}:\n\n1. Build one project you can explain end to end.\n2. Practise explaining your decisions out loud.\n3. Map every line of the job description to something you've done.\n\n#placements #careeradvice",
+    "Resume tip from someone who screens them at {company}: strongest project first, one line on the problem, one on what YOU did, one on the result. Skip the 'objective' section. #resume #careeradvice",
+    "Mock interview season! I'm opening a few slots this month for {topic} mock interviews. Request one through my AlumniBridge profile with the role you're targeting. #mockinterview #mentorship",
+  ],
+  learning: [
+    "This month I went deep into {topic}. Biggest lesson: the fundamentals you think you can skip are exactly the ones production will test you on. #learning {tagTopic}",
+  ],
+  campus: [
+    "Visited the SJCEM campus after {years} years today. The canteen chai is exactly the same, the labs are much better. 🏫 #sjcem #alumni",
+    "Class of {batch}, where are you all now? Drop a comment, let's plan a meetup in {city}. #sjcem #reunion",
+  ],
+};
 
 const COMMENTS = {
-  career: ['Congratulations! 🎉', 'Many congratulations, well deserved!', 'Congrats! All the best for the new role.', 'So happy for you, this is great news.', 'Congratulations! {company} is lucky to have you.'],
-  advice: ['Very helpful, thank you for sharing.', 'This is gold for freshers.', 'Point 2 is so underrated.', 'Saving this. Thanks!', 'Couldn’t agree more.', 'Would love a session on this.'],
-  hiring: ['Is this open for 2026 graduates?', 'Sent you a request on AlumniBridge!', 'Thanks for sharing, will apply.', 'Does the role need prior internship experience?', 'Great opportunity for juniors.'],
-  learning: ['Congrats on clearing it!', 'Would love your notes, thanks!', 'Great job, keep going.', 'Very inspiring.', 'How long did you prepare for it?'],
-  campus: ['The canteen chai never changes 😄', 'Class of {batch} here!', 'Count me in for the meetup.', 'Miss those days.', 'Proud to be an SJCEMite.'],
-  project: ['Amazing work!', 'Congratulations to the whole team.', 'Would love to read more about this.', 'Great effort, well done.'],
-  question: ['Following this thread.', 'Great question.', 'Personal projects, for sure.', 'Internships, they teach you how teams work.', 'Happy to connect!'],
+  opening: ['Is this open for the 2026 batch?', 'Sent you a referral request!', 'Very relevant for juniors, sharing in our class group.', 'Does the role need prior internship experience?', 'Interested, I have requested through AlumniBridge.', 'What does the technical round focus on?', 'Thanks for posting this, sir!'],
+  career: ['Congratulations! 🎉', 'Many congratulations, well deserved!', 'Congrats! All the best for the new role.'],
+  advice: ['Very helpful, thank you for sharing.', 'This is gold for freshers.', 'Saving this. Thanks!', 'Would love a session on this.'],
+  learning: ['Great insight.', 'Very inspiring, keep going.'],
+  campus: ['Miss those days.', 'Count me in for the meetup.', 'Proud to be an SJCEMite.'],
+};
+
+const REACTION_MIX = {
+  opening: [['like', 55], ['insightful', 20], ['support', 12], ['celebrate', 8], ['curious', 5]],
+  career: [['celebrate', 55], ['like', 30], ['support', 15]],
+  advice: [['insightful', 45], ['like', 40], ['support', 10], ['curious', 5]],
+  learning: [['insightful', 50], ['like', 40], ['celebrate', 10]],
+  campus: [['like', 55], ['support', 25], ['celebrate', 20]],
+};
+const reactionFor = (group) => {
+  const mix = REACTION_MIX[group];
+  let r = rnd() * mix.reduce((s, [, w]) => s + w, 0);
+  for (const [name, w] of mix) if ((r -= w) <= 0) return name;
+  return 'like';
 };
 
 /* --------------------------------- main --------------------------------- */
@@ -167,12 +170,10 @@ async function fetchAll(table, columns, build) {
   }
 }
 
-const chunks = (arr, n = 200) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
-
 async function main() {
   const records = await fetchAll(
     'alumni_records',
-    'branch, batch_year, claimed_by, first_company:companies!first_company_id(name), alumni_profiles(designation, location, experience_years, current_company:companies!current_company_id(name))',
+    'branch, batch_year, claimed_by, first_company:companies!first_company_id(name), alumni_profiles(designation, location, experience_years, current_company_id, current_company:companies!current_company_id(name))',
     (q) => q.like('student_id', 'SYNTH_%').not('claimed_by', 'is', null)
   );
   const authors = records
@@ -184,6 +185,7 @@ async function main() {
         branch: r.branch,
         batch: r.batch_year,
         designation: p.designation,
+        companyId: p.current_company_id,
         company: p.current_company?.name ?? 'my company',
         first: r.first_company?.name ?? 'my first company',
         city: p.location && p.location !== 'Remote' ? p.location : 'Mumbai',
@@ -193,9 +195,8 @@ async function main() {
     .filter(Boolean);
   const ids = authors.map((a) => a.id);
   console.log(`${authors.length} synthetic alumni found.`);
-  if (authors.length === 0) throw new Error('No synthetic alumni; run seed-synthetic-alumni.mjs --commit first.');
+  if (!authors.length) throw new Error('No synthetic alumni; run seed-synthetic-alumni.mjs --commit first.');
 
-  // In batches: 500 ids in one in() filter is too long for a request URL.
   const existing = [];
   for (const part of chunks(ids, 100)) existing.push(...(await fetchAll('posts', 'id', (q) => q.in('author_id', part))));
 
@@ -209,74 +210,131 @@ async function main() {
     for (const part of chunks(ids, 100)) {
       await db.from('post_comments').delete().in('author_id', part);
       await db.from('post_likes').delete().in('user_id', part);
+      await db.from('saved_posts').delete().in('user_id', part);
       const { error } = await db.from('posts').delete().in('author_id', part);
       if (error) throw new Error(`posts: ${error.message}`);
+      await db.from('opportunities').delete().in('posted_by', part);
+      await db.from('notifications').delete().in('user_id', part);
     }
-    console.log(`Removed ${existing.length} synthetic posts with their likes and comments.`);
+    console.log(`Removed ${existing.length} synthetic posts with their listings, reactions, comments and notifications.`);
     return;
   }
-
-  if (existing.length > 0) {
+  if (existing.length) {
     console.log(`${existing.length} synthetic posts already exist. Run with --purge first to regenerate.`);
     return;
   }
 
-  const weighted = KINDS.flatMap((k) => Array(k.weight).fill(k));
   const now = Date.now();
   const posts = [];
   for (let n = 0; n < COUNT; n++) {
     const a = pick(authors);
-    const kind = pick(weighted);
-    const vars = {
-      ...a,
-      topic: pick(TOPICS[a.branch] ?? TOPICS.COMP),
-      cert: pick(CERTS[a.branch] ?? CERTS.COMP),
-    };
-    // Skew toward recent days, as a living feed would be.
+    const topic = pick(TOPICS[a.branch] ?? TOPICS.COMP);
     const ageDays = Math.pow(rnd(), 1.8) * DAYS;
     const created = new Date(now - ageDays * 86_400_000 - Math.floor(rnd() * 3_600_000));
-    // "CIVIL:" marks a template that only reads true for that branch.
-    // A move between employers needs two different ones.
-    const fits = kind.posts.filter(
-      (t) => (!/^[A-Z]+:/.test(t) || t.startsWith(`${a.branch}:`)) && !(t.includes('{first}') && a.first === a.company)
-    );
-    const body = fill(pick(fits).replace(/^[A-Z]+:/, ''), vars);
-    posts.push({ id: crypto.randomUUID(), author: a, kind: kind.kind, body, created_at: created.toISOString(), vars });
+    const vars = { ...a, topic, tagBranch: tagOf(a.branch), tagTopic: tagOf(topic) };
+
+    if (chance(OPENING_SHARE)) {
+      const kind = pick(['job', 'job', 'job', 'internship', 'internship', 'placement', 'referral', 'referral']);
+      const roles = ROLES[a.branch] ?? ROLES.COMP;
+      const title = kind === 'internship' ? pick(roles.intern) : pick(roles.job);
+      // Most openings are still open; older ones have passed their deadline.
+      const deadline = new Date(created.getTime() + (7 + Math.floor(rnd() * 30)) * 86_400_000);
+      const o = {
+        type: kind,
+        title: kind === 'placement' ? `Campus drive: ${title}` : title,
+        company_id: a.companyId,
+        location: a.city,
+        work_mode: kind === 'placement' ? 'onsite' : pick(['onsite', 'onsite', 'hybrid', 'hybrid', 'remote']),
+        experience: kind === 'internship' ? null : pick(EXPERIENCE),
+        compensation: kind === 'internship' ? pick(STIPEND) : pick(PAY[a.branch] ?? PAY.COMP),
+        duration: kind === 'internship' ? pick(DURATION) : null,
+        deadline: isoDay(deadline),
+        eligibility: `${pick(BATCHES)}, ${a.branch}${chance(0.5) ? '/IT' : ''}, ${pick(CGPA)}`,
+        target_skills: pickN(SKILLS[a.branch] ?? SKILLS.COMP, 3 + Math.floor(rnd() * 3)),
+        apply_via: chance(0.8) ? 'request' : 'message',
+        is_open: deadline.getTime() > now,
+      };
+      const body = fill(pick(OPENING_BODIES[kind]), { ...vars, ...o, title });
+      posts.push({ id: crypto.randomUUID(), author: a, group: 'opening', kind, body, created_at: created.toISOString(), opportunity: o });
+    } else {
+      const group = pick(['career', 'advice', 'advice', 'learning', 'campus']);
+      const body = fill(pick(GENERAL[group]), vars);
+      posts.push({ id: crypto.randomUUID(), author: a, group, kind: group, body, created_at: created.toISOString() });
+    }
   }
 
-  // Likes: most posts get a handful, a few get many. Comments: fewer, from other synthetic alumni.
-  const likes = [];
+  // Reactions, comments and reposts from other synthetic alumni.
+  const reactions = [];
   const comments = [];
+  const reposts = [];
   for (const p of posts) {
-    const n = Math.floor(Math.pow(rnd(), 2.2) * 80);
-    for (const u of pickN(ids.filter((id) => id !== p.author.id), n)) {
-      likes.push({ post_id: p.id, user_id: u, created_at: new Date(new Date(p.created_at).getTime() + Math.floor(rnd() * 3 * 86_400_000)).toISOString() });
+    const others = ids.filter((id) => id !== p.author.id);
+    const n = Math.floor(Math.pow(rnd(), 2) * (p.group === 'opening' ? 70 : 50));
+    for (const u of pickN(others, n)) {
+      reactions.push({ post_id: p.id, user_id: u, reaction: reactionFor(p.group), created_at: new Date(new Date(p.created_at).getTime() + Math.floor(rnd() * 3 * 86_400_000)).toISOString() });
     }
     const c = chance(0.7) ? Math.floor(Math.pow(rnd(), 1.6) * 7) : 0;
     let t = new Date(p.created_at).getTime();
-    for (const u of pickN(ids.filter((id) => id !== p.author.id), c)) {
+    for (const u of pickN(others, c)) {
       t += Math.floor(rnd() * 20 * 3_600_000) + 300_000;
-      comments.push({ post_id: p.id, author_id: u, body: fill(pick(COMMENTS[p.kind]), p.vars), created_at: new Date(Math.min(t, now)).toISOString() });
+      comments.push({ post_id: p.id, author_id: u, body: pick(COMMENTS[p.group]), created_at: new Date(Math.min(t, now)).toISOString() });
+    }
+    // Openings get shared onward, as they would be.
+    if (p.group === 'opening' && chance(0.12)) {
+      const by = pick(others);
+      const at = new Date(Math.min(now, new Date(p.created_at).getTime() + Math.floor(rnd() * 2 * 86_400_000) + 600_000));
+      reposts.push({
+        id: crypto.randomUUID(),
+        author_id: by,
+        body: chance(0.5) ? pick(['Sharing for juniors from SJCEM 👇', 'Great opening, do apply!', 'Sharing with my network. #hiring', 'Relevant for the 2026 batch. #placements']) : '',
+        repost_of: p.id,
+        created_at: at.toISOString(),
+      });
     }
   }
 
   const by = (f) => posts.reduce((m, p) => ((m[f(p)] = (m[f(p)] ?? 0) + 1), m), {});
   console.log('Kinds:', by((p) => p.kind));
-  console.log(`Authors: ${new Set(posts.map((p) => p.author.id)).size}, likes: ${likes.length}, comments: ${comments.length}`);
-  for (const p of pickN(posts, 3)) console.log('\n---', p.kind, p.created_at.slice(0, 10), '\n' + p.body);
+  console.log(`Authors: ${new Set(posts.map((p) => p.author.id)).size}; reactions ${reactions.length}; comments ${comments.length}; reposts ${reposts.length}`);
+  for (const p of pickN(posts.filter((x) => x.opportunity), 2)) console.log('\n---', p.kind, p.created_at.slice(0, 10), '\n' + p.body, '\n', p.opportunity);
 
   if (!COMMIT) {
     console.log('\nDry run: nothing written. Pass --commit to write.');
     return;
   }
 
+  // Listings first; posts point at them.
+  const openings = posts.filter((p) => p.opportunity);
+  for (const part of chunks(openings, 200)) {
+    const { data, error } = await db
+      .from('opportunities')
+      .insert(part.map((p) => ({ posted_by: p.author.id, description: p.body, created_at: p.created_at, ...p.opportunity })))
+      .select('id');
+    if (error) throw new Error(`opportunities: ${error.message} (run with --purge to clean up)`);
+    data.forEach((row, i) => (part[i].opportunity_id = row.id));
+  }
+  const hashtags = (text) => [...new Set([...text.matchAll(/(^|\s)#([\p{L}\p{N}_]{2,40})/gu)].map((m) => m[2].toLowerCase()))].slice(0, 10);
   for (const part of chunks(posts)) {
-    const { error } = await db
-      .from('posts')
-      .insert(part.map((p) => ({ id: p.id, author_id: p.author.id, body: p.body, created_at: p.created_at, updated_at: p.created_at })));
+    const { error } = await db.from('posts').insert(
+      part.map((p) => ({
+        id: p.id,
+        author_id: p.author.id,
+        body: p.body,
+        created_at: p.created_at,
+        updated_at: p.created_at,
+        opportunity_id: p.opportunity_id ?? null,
+        hashtags: hashtags(p.body),
+      }))
+    );
     if (error) throw new Error(`posts: ${error.message} (run with --purge to clean up)`);
   }
-  for (const part of chunks(likes, 1000)) {
+  for (const part of chunks(reposts)) {
+    const { error } = await db
+      .from('posts')
+      .insert(part.map((r) => ({ ...r, updated_at: r.created_at, hashtags: hashtags(r.body) })));
+    if (error) throw new Error(`reposts: ${error.message} (run with --purge to clean up)`);
+  }
+  for (const part of chunks(reactions, 1000)) {
     const { error } = await db.from('post_likes').insert(part);
     if (error) throw new Error(`post_likes: ${error.message} (run with --purge to clean up)`);
   }
@@ -284,7 +342,10 @@ async function main() {
     const { error } = await db.from('post_comments').insert(part);
     if (error) throw new Error(`post_comments: ${error.message} (run with --purge to clean up)`);
   }
-  console.log(`\nDone: ${posts.length} posts, ${likes.length} likes, ${comments.length} comments.`);
+  // The triggers filed a notification for every reaction, comment and repost;
+  // between synthetic accounts that is noise.
+  for (const part of chunks(ids, 100)) await db.from('notifications').delete().in('user_id', part);
+  console.log(`\nDone: ${posts.length} posts (${openings.length} openings), ${reposts.length} reposts, ${reactions.length} reactions, ${comments.length} comments.`);
 }
 
 main().catch((e) => {
