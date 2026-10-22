@@ -4,7 +4,7 @@ import { requireUser } from '@/lib/session';
 import { getNavBadges } from '@/lib/badges';
 import { getAlumniProfile } from '@/lib/queries';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { skillOverlap, roleOverlap } from '@/lib/matching';
+import { skillOverlap, roleOverlap, sharedSkills } from '@/lib/matching';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { StatsCards } from '@/components/dashboard/cards';
 import { Card } from '@/components/ui/card';
@@ -84,10 +84,12 @@ export default async function AlumniSuggestionsPage() {
       const skills = skillOverlap(s.skills ?? [], mySkills);
       if (skills > 0) {
         score += Math.round(skills * 25);
-        const shared = (s.skills ?? []).filter((sk: string) =>
-          mySkills.some((m) => m.toLowerCase() === sk.toLowerCase())
+        const { exact, related } = sharedSkills(s.skills ?? [], mySkills);
+        signals.push(
+          exact.length
+            ? `Shared skills: ${exact.slice(0, 4).join(', ')}`
+            : `Related skills: ${related.slice(0, 3).map((r) => `${r.mine} ~ ${r.theirs}`).join(', ')}`
         );
-        signals.push(`Shared skills: ${shared.slice(0, 4).join(', ')}`);
       }
 
       if (s.location_pref && profile.location && s.location_pref.toLowerCase() === profile.location.toLowerCase()) {

@@ -12,7 +12,7 @@ export type NotificationGroup = 'all' | 'posts' | 'network' | 'requests';
 const GROUP_TYPES: Record<Exclude<NotificationGroup, 'all'>, string[]> = {
   posts: ['post_like', 'post_comment', 'mention', 'repost'],
   network: ['connection_request', 'connection_accepted', 'endorsement', 'profile_view'],
-  requests: ['request_received', 'request_responded', 'interview_scheduled', 'interview_result'],
+  requests: ['request_received', 'request_responded', 'interview_scheduled', 'interview_response', 'interview_result'],
 };
 
 export type NotificationItem = {
@@ -46,6 +46,7 @@ export function describe(
   const post = n.post_id ? `/posts/${n.post_id}` : `${p}/home`;
   const profile = actorId ? `${p}/people/${actorId}` : `${p}/network`;
   const req = REQUEST_LABEL[n.data?.request_type] ?? 'request';
+  const interviewHref = n.data?.interview_id ? `${p}/interviews/${n.data.interview_id}` : `${p}/interviews`;
   switch (n.type) {
     case 'post_like':
       return { text: 'reacted to your post', href: post };
@@ -67,10 +68,18 @@ export function describe(
       return { text: n.data?.skill ? `endorsed you for ${n.data.skill}` : 'endorsed one of your skills', href: profile };
     case 'profile_view':
       return { text: 'viewed your profile', href: profile };
-    case 'interview_scheduled':
-      return { text: n.data?.title ? `scheduled an interview round: ${n.data.title}` : 'scheduled an interview round', href: `${p}/interviews` };
+    case 'interview_scheduled': {
+      const round = n.data?.round_title ?? n.data?.title;
+      const verb = n.data?.rescheduled ? 'rescheduled' : 'scheduled';
+      return { text: round ? `${verb} an interview round: ${round}` : `${verb} an interview with you`, href: interviewHref };
+    }
+    case 'interview_response':
+      return {
+        text: n.data?.response === 'reschedule_requested' ? 'asked for another time for an interview round' : 'accepted an interview round',
+        href: interviewHref,
+      };
     case 'interview_result':
-      return { text: 'shared an interview result with you', href: `${p}/interviews` };
+      return { text: n.data?.decision ? 'shared the decision on your interview' : 'shared an interview result with you', href: interviewHref };
     default:
       return { text: 'has an update for you', href: `${p}/home` };
   }

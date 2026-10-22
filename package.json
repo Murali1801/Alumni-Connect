@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx lib/matching.test.ts",
+    "test": "tsx lib/matching.test.ts && tsx lib/ml/semantic.test.ts && tsx lib/ml/feed-rank.test.ts && tsx lib/search.test.ts && tsx lib/chatbot/rag.test.ts && tsx lib/interviews.test.ts && tsx lib/learning.test.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "node scripts/assert-no-local-env.mjs && opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },

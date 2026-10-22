@@ -18,7 +18,7 @@ const COLLAPSE_KEY = 'sjcem.sidebar.collapsed';
  * page heading in the member layout, for pages that carry their own.
  */
 export function DashboardShell(props: {
-  user: { id?: string; full_name: string; email: string; role: Role };
+  user: { id?: string; full_name: string; email: string; role: Role; avatar_url?: string | null };
   badges?: NavBadges;
   title: string;
   description: string;

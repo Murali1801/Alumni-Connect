@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { SUGGESTED_QUESTIONS } from '@/lib/chatbot/suggestions';
 import type { Role } from '@/lib/session';
 
-type Source = { id: string; question: string; href?: string; hrefLabel?: string };
+/** A source the answer cited: [n] in the text, `url` an in-app path when it has a page. */
+type Source = { n: number; title: string; url: string | null; kind?: string };
 type Turn = {
   id: string;
   role: 'user' | 'assistant';
@@ -73,7 +74,11 @@ export function HelpBot({ role }: { role: Role }) {
           id: `a-${Date.now()}`,
           role: 'assistant',
           content: data.answer,
-          sources: data.sources ?? [],
+          // Only in-app paths become links, whatever the server sends.
+          sources: ((data.sources ?? []) as Source[]).map((s) => ({
+            ...s,
+            url: typeof s.url === 'string' && s.url.startsWith('/') && !s.url.startsWith('//') ? s.url : null,
+          })),
           mode: data.mode,
         },
       ]);
@@ -165,21 +170,28 @@ export function HelpBot({ role }: { role: Role }) {
                     <p className="whitespace-pre-wrap">{t.content}</p>
 
                     {t.role === 'assistant' && t.sources && t.sources.length > 0 && (
-                      <div className="space-y-1 border-t border-border/60 pt-2">
-                        {t.sources
-                          .filter((s) => s.href)
-                          .slice(0, 2)
-                          .map((s) => (
-                            <Link
-                              key={s.id}
-                              href={s.href!}
-                              onClick={() => setOpen(false)}
-                              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                            >
-                              <ArrowRight className="size-3" />
-                              {s.hrefLabel ?? 'Open the page'}
-                            </Link>
+                      <div className="border-t border-border/60 pt-2">
+                        <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Sources
+                        </p>
+                        <ol className="space-y-1">
+                          {t.sources.map((s) => (
+                            <li key={s.n} className="flex items-start gap-1.5 text-xs">
+                              <span className="shrink-0 tabular-nums text-muted-foreground">[{s.n}]</span>
+                              {s.url ? (
+                                <Link
+                                  href={s.url}
+                                  onClick={() => setOpen(false)}
+                                  className="min-w-0 font-medium text-primary hover:underline"
+                                >
+                                  {s.title}
+                                </Link>
+                              ) : (
+                                <span className="min-w-0 text-foreground">{s.title}</span>
+                              )}
+                            </li>
                           ))}
+                        </ol>
                       </div>
                     )}
                   </div>
@@ -218,8 +230,8 @@ export function HelpBot({ role }: { role: Role }) {
           </form>
 
           <p className="border-t border-border px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
-            Platform answers come from a fixed set of documented facts. It cannot see your account,
-            your requests or your messages.
+            Answers cite their sources. It can see your own profile, requests and sessions, never
+            your messages or anyone else’s private data.
           </p>
         </div>
       )}

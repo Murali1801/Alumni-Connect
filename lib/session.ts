@@ -12,6 +12,8 @@ export type SessionUser = {
   role: Role;
   full_name: string;
   created_at: string;
+  /** Public URL of the profile photo, if the member uploaded one. */
+  avatar_url: string | null;
 };
 
 /**
@@ -50,12 +52,18 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const admin = createAdminClient();
   const { data } = await admin
     .from('users')
-    .select('id, email, role, full_name, created_at')
+    .select('id, email, role, full_name, created_at, avatar_path')
     .eq('id', user.id)
     .maybeSingle();
 
   if (!data) return null;
-  return data as SessionUser;
+  const { avatar_path, ...rest } = data;
+  return {
+    ...rest,
+    avatar_url: avatar_path
+      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${avatar_path}`
+      : null,
+  } as SessionUser;
 });
 
 /** Require a session; optionally require one of `roles`. Redirects otherwise. */

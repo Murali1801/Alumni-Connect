@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { NAV, type NavBadges } from '@/lib/nav';
 import type { Role } from '@/lib/session';
 import { BrandMark } from '@/components/shell/brand';
-import { InitialsAvatar } from '@/components/patterns';
+import { MemberAvatar } from '@/components/patterns';
 import { HelpBot } from '@/components/chat/help-bot';
 import { useLiveNotifications } from '@/components/shell/use-live-notifications';
 import {
@@ -61,7 +61,7 @@ export function MemberShell({
   bare = false,
   children,
 }: {
-  user: { id?: string; full_name: string; email: string; role: MemberRole };
+  user: { id?: string; full_name: string; email: string; role: MemberRole; avatar_url?: string | null };
   badges?: NavBadges;
   title: string;
   description: string;
@@ -106,14 +106,14 @@ export function MemberShell({
         )}
         aria-label="Me: your profile and tools"
       >
-        <InitialsAvatar name={user.full_name} size="sm" className="size-6 text-[9px]" />
+        <MemberAvatar name={user.full_name} url={user.avatar_url} size="sm" className="size-6 text-[9px]" />
         <span className="hidden items-center text-[11px] md:flex">
           Me <ChevronDown className="size-3" />
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <div className="flex items-center gap-2.5 px-1.5 py-2">
-          <InitialsAvatar name={user.full_name} size="md" />
+          <MemberAvatar name={user.full_name} url={user.avatar_url} size="md" />
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-sm font-semibold">{user.full_name}</span>
             <span className="truncate text-xs text-muted-foreground">{user.role === 'alumni' ? 'Alumnus' : 'Student'} · {user.email}</span>

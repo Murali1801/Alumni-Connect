@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { countUpcomingCalls } from '@/lib/calls';
 import { unreadCount } from '@/lib/messages';
 import { countPendingInvitations } from '@/lib/network';
+import { countUpcomingInterviews } from '@/lib/interviews';
 import type { NavBadges } from '@/lib/nav';
 import type { SessionUser } from '@/lib/session';
 
@@ -19,26 +20,28 @@ export const getNavBadges = cache(async (user: SessionUser): Promise<NavBadges> 
   };
 
   if (user.role === 'student') {
-    const [pendingRequests, openOpportunities, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications] = await Promise.all([
+    const [pendingRequests, openOpportunities, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications, upcomingInterviews] = await Promise.all([
       count('requests', (q) => q.eq('student_id', user.id).eq('status', 'pending')),
       count('opportunities', (q) => q.eq('is_open', true)),
       countUpcomingCalls(user.id),
       unreadCount(user.id),
       countPendingInvitations(user.id),
       count('notifications', (q) => q.eq('user_id', user.id).is('read_at', null)),
+      countUpcomingInterviews(user.id),
     ]);
-    return { pendingRequests, openOpportunities, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications };
+    return { pendingRequests, openOpportunities, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications, upcomingInterviews };
   }
 
   if (user.role === 'alumni') {
-    const [pendingRequests, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications] = await Promise.all([
+    const [pendingRequests, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications, upcomingInterviews] = await Promise.all([
       count('requests', (q) => q.eq('alumni_id', user.id).eq('status', 'pending')),
       countUpcomingCalls(user.id),
       unreadCount(user.id),
       countPendingInvitations(user.id),
       count('notifications', (q) => q.eq('user_id', user.id).is('read_at', null)),
+      countUpcomingInterviews(user.id),
     ]);
-    return { pendingRequests, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications };
+    return { pendingRequests, upcomingCalls, unreadMessages, pendingInvitations, unreadNotifications, upcomingInterviews };
   }
 
   const [verificationQueue, upcomingCalls] = await Promise.all([

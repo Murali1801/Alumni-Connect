@@ -16,6 +16,9 @@ import {
   Video,
   MessageSquare,
   Network,
+  GraduationCap,
+  BookOpen,
+  Mic,
   UserCircle,
   FileText,
   Database,
@@ -36,7 +39,8 @@ export type NavItem = {
     | 'openOpportunities'
     | 'unreadMessages'
     | 'pendingInvitations'
-    | 'unreadNotifications';
+    | 'unreadNotifications'
+    | 'upcomingInterviews';
   badgeLabel?: string;
 };
 
@@ -59,6 +63,8 @@ export const NAV: Record<Role, NavGroup[]> = {
         { label: 'My Requests', href: '/student/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/student/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
         { label: 'Opportunities', href: '/student/opportunities', icon: Briefcase, badgeKey: 'openOpportunities' },
+        { label: 'Interviews', href: '/student/interviews', icon: Mic, badgeKey: 'upcomingInterviews' },
+        { label: 'Learning', href: '/student/learning', icon: BookOpen },
         { label: 'Schedule', href: '/student/calendar', icon: Calendar, badgeKey: 'upcomingCalls' },
         { label: 'Video Rooms', href: '/student/calls', icon: Video },
         { label: 'Analytics', href: '/student/analytics', icon: BarChart3 },
@@ -87,8 +93,11 @@ export const NAV: Record<Role, NavGroup[]> = {
       items: [
         { label: 'Home', href: '/alumni/home', icon: Home },
         { label: 'My Network', href: '/alumni/network', icon: Network, badgeKey: 'pendingInvitations' },
+        { label: 'Find Students', href: '/alumni/students', icon: GraduationCap },
         { label: 'Request Inbox', href: '/alumni/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/alumni/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
+        { label: 'Interviews', href: '/alumni/interviews', icon: Mic, badgeKey: 'upcomingInterviews' },
+        { label: 'Learning', href: '/alumni/learning', icon: BookOpen },
         { label: 'My Mentees', href: '/alumni/mentees', icon: Users },
         { label: 'My Postings', href: '/alumni/opportunities', icon: Briefcase },
         { label: 'Schedule', href: '/alumni/calendar', icon: Calendar, badgeKey: 'upcomingCalls' },

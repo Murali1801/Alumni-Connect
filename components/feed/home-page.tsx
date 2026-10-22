@@ -3,6 +3,7 @@ import { ArrowDown, Hash, Newspaper, X } from 'lucide-react';
 import { getNavBadges } from '@/lib/badges';
 import { getFeed, type FeedFilter } from '@/lib/posts';
 import { getHomeContext } from '@/lib/home';
+import { getTopFeed } from '@/lib/ml/top-feed';
 import type { SessionUser } from '@/lib/session';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,8 @@ const isFilter = (v: string | undefined): v is FeedFilter => FILTERS.some((f) =>
  * composer and feed in the middle, people and opportunities on the right.
  * `?show=` filters the feed (openings by kind, or saved posts), `?tag=` narrows
  * it to a hashtag, `?mine=1` to the viewer's own posts; `?before=` pages it.
+ * `?sort=recent` switches from the default Top (ranked by lib/ml/feed-rank.ts)
+ * to newest first; your own posts and Saved are always newest first.
  */
 export async function HomePage({
   user,
@@ -37,19 +40,28 @@ export async function HomePage({
 }: {
   user: SessionUser;
   basePath: '/student/home' | '/alumni/home';
-  searchParams: { before?: string; mine?: string; show?: string; tag?: string };
+  searchParams: { before?: string; mine?: string; show?: string; tag?: string; sort?: string };
 }) {
   const mine = searchParams.mine === '1';
   const show: FeedFilter = isFilter(searchParams.show) ? searchParams.show : 'all';
   const tag = searchParams.tag?.replace(/[^\p{L}\p{N}_]/gu, '').toLowerCase().slice(0, 40) || undefined;
+  const top = searchParams.sort !== 'recent' && !mine && show !== 'saved';
   const [badges, home, feed] = await Promise.all([
     getNavBadges(user),
     getHomeContext(user),
-    getFeed({ viewerId: user.id, cursor: searchParams.before, authorId: mine ? user.id : undefined, filter: show, tag }),
+    top
+      ? getTopFeed({ viewerId: user.id, cursor: searchParams.before, filter: show, tag })
+      : getFeed({ viewerId: user.id, cursor: searchParams.before, authorId: mine ? user.id : undefined, filter: show, tag }),
   ]);
   const prefix = user.role === 'alumni' ? '/alumni' : '/student';
   const link = (over: Record<string, string | undefined>) => {
-    const params = { ...(mine ? { mine: '1' } : {}), ...(show !== 'all' ? { show } : {}), ...(tag ? { tag } : {}), ...over };
+    const params = {
+      ...(mine ? { mine: '1' } : {}),
+      ...(show !== 'all' ? { show } : {}),
+      ...(tag ? { tag } : {}),
+      ...(searchParams.sort === 'recent' ? { sort: 'recent' } : {}),
+      ...over,
+    };
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
     return qs ? `${basePath}?${qs}` : basePath;
   };
@@ -79,6 +91,28 @@ export async function HomePage({
               </Link>
             ))}
           </nav>
+
+          {!mine && show !== 'saved' && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              Sort by:
+              <Link
+                href={link({ sort: undefined, before: undefined })}
+                aria-current={top ? 'true' : undefined}
+                className={cn('font-medium hover:underline', top ? 'text-foreground' : 'text-muted-foreground')}
+              >
+                Top
+              </Link>
+              ·
+              <Link
+                href={link({ sort: 'recent', before: undefined })}
+                aria-current={!top ? 'true' : undefined}
+                className={cn('font-medium hover:underline', !top ? 'text-foreground' : 'text-muted-foreground')}
+              >
+                Recent
+              </Link>
+            </div>
+          )}
 
           {(tag || mine) && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
