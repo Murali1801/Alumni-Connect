@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { NAV, WORKSPACE_LABEL, type NavBadges, type NavItem } from '@/lib/nav';
 import type { Role } from '@/lib/session';
+import { BrandMark } from '@/components/shell/brand';
 
 function isActive(pathname: string, item: NavItem) {
   if (item.exact) return pathname === item.href;
@@ -45,11 +46,7 @@ export function Sidebar({
         <div className={cn('mb-6 flex items-center', isCollapsed ? 'justify-center' : 'justify-between')}>
           {!isCollapsed && (
             <Link href={role === 'admin' ? '/admin' : `/${role}/home`} className="flex items-center gap-2">
-              <span
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold bg-primary text-primary-foreground"
-              >
-                AB
-              </span>
+              <BrandMark className="size-7" />
               <span className="flex flex-col leading-none">
                 <span className="text-base font-bold text-sidebar-foreground">AlumniBridge</span>
                 <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">

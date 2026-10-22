@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Role } from '@/lib/session';
+import { avatarUrl } from '@/lib/network';
 
 /* ------------------------------------------------------------------ */
 /* Member profiles: what any signed-in member sees when they open one  */
@@ -11,6 +12,8 @@ export type MemberProfile = {
   role: Role;
   full_name: string;
   joined_at: string;
+  avatar_url: string | null;
+  cover_url: string | null;
   headline: string;
   location: string | null;
   branch: string | null;
@@ -35,7 +38,11 @@ const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ?
 export async function getMemberProfile(userId: string): Promise<MemberProfile | null> {
   if (!/^[0-9a-f-]{36}$/i.test(userId)) return null;
   const db = createAdminClient();
-  const { data: user } = await db.from('users').select('id, role, full_name, created_at').eq('id', userId).maybeSingle();
+  const { data: user } = await db
+    .from('users')
+    .select('id, role, full_name, created_at, avatar_path, cover_path')
+    .eq('id', userId)
+    .maybeSingle();
   if (!user) return null;
 
   const base = {
@@ -43,6 +50,8 @@ export async function getMemberProfile(userId: string): Promise<MemberProfile | 
     role: user.role as Role,
     full_name: user.full_name,
     joined_at: user.created_at,
+    avatar_url: avatarUrl(user.avatar_path),
+    cover_url: avatarUrl(user.cover_path),
     location: null,
     branch: null,
     batch_year: null,
@@ -125,4 +134,13 @@ export async function getMemberProfile(userId: string): Promise<MemberProfile | 
   }
 
   return { ...base, headline: 'AlumniBridge team' };
+}
+
+/** Note that `viewerId` looked at `viewedId`'s profile today (once per day). */
+export async function recordProfileView(viewerId: string, viewedId: string): Promise<void> {
+  if (viewerId === viewedId) return;
+  const db = createAdminClient();
+  await db
+    .from('profile_views')
+    .upsert({ viewer_id: viewerId, viewed_id: viewedId }, { onConflict: 'viewer_id,viewed_id,viewed_on', ignoreDuplicates: true });
 }

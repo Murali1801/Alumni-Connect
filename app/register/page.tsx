@@ -5,6 +5,7 @@ import { getSessionUser, HOME_FOR } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { RegisterForm } from '@/app/register/register-form';
+import { BrandMark } from '@/components/shell/brand';
 
 export const metadata = { title: 'Create a student account' };
 export const dynamic = 'force-dynamic';
@@ -23,11 +24,7 @@ export default async function RegisterPage() {
 
       <main className="relative z-10 w-full max-w-lg">
         <Link href="/" className="mb-6 flex items-center justify-center gap-2.5">
-          <span
-            className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground"
-          >
-            AB
-          </span>
+          <BrandMark className="size-8" />
           <span className="font-display text-lg">AlumniBridge</span>
         </Link>
 

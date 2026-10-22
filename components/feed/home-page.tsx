@@ -43,6 +43,7 @@ export async function HomePage({
     <DashboardShell
       user={user}
       badges={badges}
+      bare
       title={`Welcome, ${firstName}`}
       description="What the SJCEM network is sharing: career moves, advice, openings and questions."
     >

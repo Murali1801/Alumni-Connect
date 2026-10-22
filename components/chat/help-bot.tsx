@@ -99,7 +99,7 @@ export function HelpBot({ role }: { role: Role }) {
         aria-label={open ? 'Close the help assistant' : 'Open the help assistant'}
         aria-expanded={open}
         className={cn(
-          'fixed bottom-5 right-5 z-50 flex size-12 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'fixed bottom-20 right-4 z-50 flex size-12 md:bottom-5 md:right-5 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           open ? 'bg-muted text-foreground' : 'bg-primary text-primary-foreground'
         )}
       >
@@ -110,7 +110,7 @@ export function HelpBot({ role }: { role: Role }) {
         <div
           role="dialog"
           aria-label="Help assistant"
-          className="fixed bottom-20 right-5 z-50 flex h-[min(32rem,calc(100dvh-7rem))] w-[min(24rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
+          className="fixed bottom-36 right-4 z-50 flex h-[min(32rem,calc(100dvh-11rem))] md:bottom-20 md:right-5 md:h-[min(32rem,calc(100dvh-7rem))] w-[min(24rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
         >
           <header className="flex items-center gap-2.5 border-b border-border px-4 py-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/dashboard/shell';
 import { StatsCards } from '@/components/dashboard/cards';
 import { TrendChart, MixChart, FunnelCard, RankingChart } from '@/components/analytics/charts';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 export const metadata = { title: 'Analytics' };
 export const dynamic = 'force-dynamic';
@@ -125,6 +126,24 @@ export default async function StudentAnalyticsPage() {
           </ul>
         </Card>
       </div>
+
+      <Card className="gap-0 p-5">
+        <h2 className="mb-1 text-base font-semibold text-foreground">Skills worth adding</h2>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Asked for by open roles, missing from your profile. The number is how many open roles ask for it.
+        </p>
+        {data.skillGaps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Your listed skills already cover every open posting. Keep the profile current.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {data.skillGaps.map(([skill, count]) => (
+              <Badge key={skill} variant="secondary" className="font-normal">
+                {skill} · {count}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </Card>
     </DashboardShell>
   );
 }

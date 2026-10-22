@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ClaimForm } from '@/app/claim/[token]/claim-form';
 import { Field } from '@/components/patterns';
+import { BrandMark } from '@/components/shell/brand';
 
 export const metadata = { title: 'Claim your profile' };
 export const dynamic = 'force-dynamic';
@@ -31,11 +32,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ token: s
 
       <main className="relative z-10 w-full max-w-lg">
         <Link href="/" className="mb-6 flex items-center justify-center gap-2.5">
-          <span
-            className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground"
-          >
-            AB
-          </span>
+          <BrandMark className="size-8" />
           <span className="font-display text-lg">AlumniBridge</span>
         </Link>
 

@@ -5,17 +5,33 @@ import { cn } from '@/lib/utils';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { HelpBot } from '@/components/chat/help-bot';
+import { MemberShell } from '@/components/shell/member-shell';
 import type { NavBadges } from '@/lib/nav';
 import type { Role } from '@/lib/session';
 
 const COLLAPSE_KEY = 'sjcem.sidebar.collapsed';
 
 /**
- * The single console layout shared by all three roles: a collapsible sidebar
- * plus a header carrying search, notifications and the page title. What differs
- * between roles is the nav set and the page content, not the chrome.
+ * The page layout. Students and alumni get the LinkedIn-style member layout
+ * (top bar, centred column); the admin console keeps a collapsible sidebar plus
+ * a header carrying search, notifications and the page title. `bare` drops the
+ * page heading in the member layout, for pages that carry their own.
  */
-export function DashboardShell({
+export function DashboardShell(props: {
+  user: { id?: string; full_name: string; email: string; role: Role };
+  badges?: NavBadges;
+  title: string;
+  description: string;
+  actions?: ReactNode;
+  bare?: boolean;
+  children: ReactNode;
+}) {
+  const { user } = props;
+  if (user.role !== 'admin') return <MemberShell {...props} user={{ ...user, role: user.role }} />;
+  return <AdminShell {...props} />;
+}
+
+function AdminShell({
   user,
   badges = {},
   title,

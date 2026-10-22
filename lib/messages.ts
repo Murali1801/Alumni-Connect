@@ -10,8 +10,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * goes through this module, so moving to a `messages` table later touches only
  * this file.
  *
- * A conversation exists only where an accepted request does — the acceptance is
- * the consent record, and it is re-checked on every send.
+ * A conversation exists only where an accepted request or an accepted
+ * connection does — the acceptance is the consent record, and it is re-checked
+ * on every send.
  */
 
 export const CHAT_EVENT = 'chat_message';
@@ -52,8 +53,9 @@ function toMessage(row: any): ChatMessage | null {
 }
 
 /**
- * Whoever the viewer has an accepted request with, in either direction.
- * Returns a map of peer id to the request type that connected them.
+ * Whoever the viewer has an accepted request or connection with, in either
+ * direction. Returns a map of peer id to what connected them: the request type,
+ * or 'connection'.
  */
 export async function connectionsFor(userId: string): Promise<Map<string, string>> {
   const db = createAdminClient();
@@ -67,6 +69,17 @@ export async function connectionsFor(userId: string): Promise<Map<string, string
   for (const r of data ?? []) {
     const peer = r.student_id === userId ? r.alumni_id : r.student_id;
     if (peer !== userId && !peers.has(peer)) peers.set(peer, r.type);
+  }
+
+  const { data: links } = await db
+    .from('connections')
+    .select('requester_id, addressee_id')
+    .eq('status', 'accepted')
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+    .limit(2000);
+  for (const c of links ?? []) {
+    const peer = c.requester_id === userId ? c.addressee_id : c.requester_id;
+    if (peer !== userId && !peers.has(peer)) peers.set(peer, 'connection');
   }
   return peers;
 }
@@ -157,7 +170,7 @@ export async function sendMessage(
   if (!trimmed) throw new Error('Message is empty.');
   if (trimmed.length > 2000) throw new Error('Messages are limited to 2000 characters.');
   if (!(await canMessage(fromId, toId))) {
-    throw new Error('You can only message someone who has accepted a request.');
+    throw new Error('You can only message your connections and people who accepted a request.');
   }
 
   const db = createAdminClient();

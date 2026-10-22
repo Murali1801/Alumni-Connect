@@ -6,7 +6,8 @@ import type { SessionUser } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { InitialsAvatar } from '@/components/patterns';
+import { InitialsAvatar, MemberAvatar } from '@/components/patterns';
+import { ConnectButton } from '@/components/network/connect-button';
 
 const COLLEGE = 'St John College of Engineering and Management';
 
@@ -20,7 +21,7 @@ export function ProfileCard({ user, home }: { user: SessionUser; home: HomeConte
         />
         <div className="px-4 pb-4">
           <Link href={home.selfHref} className="-mt-9 inline-block rounded-full ring-4 ring-card">
-            <InitialsAvatar name={user.full_name} size="xl" />
+            <MemberAvatar name={user.full_name} url={home.avatar_url} size="xl" />
           </Link>
           <Link href={home.selfHref} className="mt-2 block">
             <h2 className="text-base font-semibold leading-snug text-foreground hover:underline">{user.full_name}</h2>
@@ -79,7 +80,7 @@ export function HomeRail({ home, opportunitiesHref, calendarHref }: { home: Home
             {home.people.items.map((p) => {
               const inner = (
                 <>
-                  <InitialsAvatar name={p.name} size="md" />
+                  <MemberAvatar name={p.name} url={p.avatar_url} size="md" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{p.detail}</p>
@@ -95,6 +96,11 @@ export function HomeRail({ home, opportunitiesHref, calendarHref }: { home: Home
                     </Link>
                   ) : (
                     <div className="flex items-center gap-3 px-4 py-2">{inner}</div>
+                  )}
+                  {p.connectId && (
+                    <div className="px-4 pb-2 pl-[3.75rem]">
+                      <ConnectButton userId={p.connectId} name={p.name} initial={{ state: 'none' }} size="sm" />
+                    </div>
                   )}
                 </li>
               );

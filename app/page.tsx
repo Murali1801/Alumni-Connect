@@ -5,6 +5,7 @@ import { getSessionUser, HOME_FOR, safeNext } from '@/lib/session';
 import { Card } from '@/components/ui/card';
 import { LoginForm } from '@/components/auth/login-form';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { BrandMark } from '@/components/shell/brand';
 
 export const metadata = { title: 'Sign in' };
 export const dynamic = 'force-dynamic';
@@ -35,11 +36,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           {/* Branding panel */}
           <div className="relative hidden w-1/2 flex-col justify-between bg-muted p-10 md:flex">
             <Link href="/" className="relative z-10 flex items-center gap-2.5">
-              <span
-                className="inline-flex size-8 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground"
-              >
-                AB
-              </span>
+              <BrandMark className="size-8" />
               <span className="font-display text-lg">AlumniBridge</span>
             </Link>
 
@@ -76,11 +73,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           <div className="flex w-full flex-col justify-center p-6 sm:p-10 md:w-1/2">
             <div className="mb-8 flex flex-col items-center gap-2 md:hidden">
               <Link href="/" className="flex items-center gap-2">
-                <span
-                  className="inline-flex size-7 items-center justify-center rounded-lg text-[11px] font-bold bg-primary text-primary-foreground"
-                >
-                  AB
-                </span>
+                <BrandMark className="size-7" />
                 <span className="font-display text-lg">AlumniBridge</span>
               </Link>
             </div>

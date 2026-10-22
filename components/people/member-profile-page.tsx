@@ -1,16 +1,18 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowDown, BadgeCheck, Briefcase, GraduationCap, MapPin, Newspaper, Pencil, Send, Target } from 'lucide-react';
+import { ArrowDown, BadgeCheck, Briefcase, GraduationCap, MapPin, MessageSquare, Newspaper, Pencil, Send, Target } from 'lucide-react';
 import { getNavBadges } from '@/lib/badges';
 import { getFeed } from '@/lib/posts';
-import { getMemberProfile } from '@/lib/people';
+import { getMemberProfile, recordProfileView } from '@/lib/people';
+import { countConnections, getConnectionState, mutualCount } from '@/lib/network';
 import { formatMonthYear } from '@/lib/format';
 import type { SessionUser } from '@/lib/session';
 import { DashboardShell } from '@/components/dashboard/shell';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { EmptyState, InitialsAvatar, SkillTags } from '@/components/patterns';
+import { EmptyState, MemberAvatar, SkillTags } from '@/components/patterns';
+import { ConnectButton } from '@/components/network/connect-button';
 import { PostCard } from '@/components/feed/post-card';
 
 const COLLEGE = 'St John College of Engineering and Management';
@@ -25,12 +27,16 @@ export async function MemberProfilePage({
   userId: string;
   before?: string;
 }) {
-  const [badges, person, posts] = await Promise.all([
+  const [badges, person, posts, connection, connections, mutuals] = await Promise.all([
     getNavBadges(viewer),
     getMemberProfile(userId),
     getFeed({ viewerId: viewer.id, authorId: userId, cursor: before, limit: 10 }),
+    getConnectionState(viewer.id, userId),
+    countConnections(userId),
+    viewer.id === userId ? Promise.resolve(0) : mutualCount(viewer.id, userId),
   ]);
   if (!person) notFound();
+  if (person.id !== viewer.id && person.role !== 'admin') await recordProfileView(viewer.id, person.id);
 
   const prefix = viewer.role === 'alumni' ? '/alumni' : '/student';
   const self = person.id === viewer.id;
@@ -43,6 +49,7 @@ export async function MemberProfilePage({
     <DashboardShell
       user={viewer}
       badges={badges}
+      bare
       title={self ? 'Your profile' : person.full_name}
       description={self ? 'How other members see you on AlumniBridge.' : person.headline}
     >
@@ -55,7 +62,7 @@ export async function MemberProfilePage({
             <div className="px-5 pb-5">
               <div className="-mt-12 flex items-end justify-between gap-3 sm:-mt-14">
                 <span className="rounded-full ring-4 ring-card">
-                  <InitialsAvatar name={person.full_name} size="xl" className="sm:size-28 sm:text-3xl" />
+                  <MemberAvatar name={person.full_name} url={person.avatar_url} size="xl" className="sm:size-28 sm:text-3xl" />
                 </span>
                 <div className="flex flex-wrap justify-end gap-2 pb-1">
                   {self ? (
@@ -63,11 +70,22 @@ export async function MemberProfilePage({
                       <Pencil />
                       Edit profile
                     </Button>
-                  ) : requestHref ? (
-                    <Button size="sm" render={<Link href={requestHref} />}>
-                      <Send />
-                      Request mentorship
-                    </Button>
+                  ) : person.role !== 'admin' ? (
+                    <>
+                      {connection.state === 'connected' && (
+                        <Button size="sm" render={<Link href={`${prefix}/messages?peer=${person.id}`} />}>
+                          <MessageSquare />
+                          Message
+                        </Button>
+                      )}
+                      <ConnectButton userId={person.id} name={person.full_name} initial={connection} size="sm" />
+                      {requestHref && (
+                        <Button size="sm" variant="outline" render={<Link href={requestHref} />}>
+                          <Send />
+                          Request mentorship
+                        </Button>
+                      )}
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -94,6 +112,17 @@ export async function MemberProfilePage({
                   {COLLEGE}
                 </span>
                 <span>Joined {formatMonthYear(person.joined_at)}</span>
+              </p>
+              <p className="mt-2 text-xs">
+                <Link
+                  href={self ? `${prefix}/network?tab=connections` : `${prefix}/people/${person.id}`}
+                  className="font-semibold text-primary hover:underline"
+                >
+                  {connections === 1 ? '1 connection' : `${connections >= 500 ? '500+' : connections} connections`}
+                </Link>
+                {!self && mutuals > 0 && (
+                  <span className="text-muted-foreground"> · {mutuals} mutual{mutuals === 1 ? '' : 's'}</span>
+                )}
               </p>
             </div>
           </Card>

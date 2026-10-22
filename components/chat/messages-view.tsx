@@ -184,7 +184,9 @@ export function MessagesView({
                   <span className="line-clamp-1 flex-1 text-xs text-muted-foreground">
                     {t.lastMessage
                       ? `${t.lastMessage.from_id === selfId ? 'You: ' : ''}${t.lastMessage.body}`
-                      : `Connected through a ${(t.requestType ?? 'request').replace('_', ' ')} request`}
+                      : t.requestType === 'connection'
+                        ? 'Connection'
+                        : `Connected through a ${(t.requestType ?? 'request').replace('_', ' ')} request`}
                   </span>
                   {(unread[t.peer.id] ?? 0) > 0 && (
                     <span className="tnum inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
@@ -215,7 +217,7 @@ export function MessagesView({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-foreground">{active.peer.full_name}</p>
               <p className="truncate text-xs capitalize text-muted-foreground">
-                {active.peer.role} · connected via {(active.requestType ?? 'request').replace('_', ' ')}
+                {active.peer.role} · {active.requestType === 'connection' ? 'connection' : `connected via ${(active.requestType ?? 'request').replace('_', ' ')}`}
               </p>
             </div>
             <ScheduleDialog

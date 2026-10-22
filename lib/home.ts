@@ -4,6 +4,7 @@ import { listCallsForUser, type CallSession } from '@/lib/calls';
 import { upcomingOf, profileStrength } from '@/lib/dashboard';
 import { getAlumniProfile, getAlumniRecordForUser, getDirectory, getStudentProfile } from '@/lib/queries';
 import { countPostsBy } from '@/lib/posts';
+import { avatarUrl, countConnections, countPendingInvitations, peopleYouMayKnow } from '@/lib/network';
 import type { SessionUser } from '@/lib/session';
 
 /* ------------------------------------------------------------------ */
@@ -17,8 +18,11 @@ export type HomePerson = {
   name: string;
   detail: string;
   href: string | null;
-  /** A short reason, e.g. "Match 72" or "COMP 2021". */
+  /** A short reason, e.g. "Match 72" or "3 mutual connections". */
   note: string | null;
+  /** Show a Connect button for this member (their user id). */
+  connectId?: string;
+  avatar_url?: string | null;
 };
 
 export type HomeOpportunity = {
@@ -32,6 +36,8 @@ export type HomeOpportunity = {
 
 export type HomeContext = {
   headline: string;
+  avatar_url: string | null;
+  cover_url: string | null;
   location: string | null;
   /** The viewer's own profile page, as others see it. */
   selfHref: string;
@@ -89,14 +95,16 @@ async function nearbyAlumni(
   }));
 }
 
-async function studentContext(user: SessionUser): Promise<HomeContext> {
+async function studentContext(user: SessionUser): Promise<Omit<HomeContext, 'avatar_url' | 'cover_url'>> {
   const db = createAdminClient();
-  const [profile, requests, calls, opportunities, posts] = await Promise.all([
+  const [profile, requests, calls, opportunities, posts, connections, invitations] = await Promise.all([
     getStudentProfile(user.id),
     db.from('requests').select('alumni_id, status').eq('student_id', user.id),
     listCallsForUser(user.id),
     openOpportunities(),
     countPostsBy(user.id),
+    countConnections(user.id),
+    countPendingInvitations(user.id),
   ]);
   const sent = requests.data ?? [];
 
@@ -130,8 +138,9 @@ async function studentContext(user: SessionUser): Promise<HomeContext> {
     profileHref: '/student/settings',
     profileStrength: profileStrength(profile, ['branch', 'batch_year', 'skills', 'target_role', 'target_company', 'target_industry', 'location_pref', 'resume_url']),
     stats: [
+      { label: 'Connections', value: connections, href: '/student/network?tab=connections' },
+      { label: 'Invitations', value: invitations, href: '/student/network' },
       { label: 'Requests sent', value: sent.length, href: '/student/requests' },
-      { label: 'Accepted', value: sent.filter((r: any) => r.status === 'accepted').length, href: '/student/requests' },
       { label: 'Your posts', value: posts, href: '/student/home?mine=1' },
     ],
     people: { title: 'Alumni you may want to meet', items: people, moreHref: '/student/suggestions' },
@@ -140,15 +149,18 @@ async function studentContext(user: SessionUser): Promise<HomeContext> {
   };
 }
 
-async function alumniContext(user: SessionUser): Promise<HomeContext> {
+async function alumniContext(user: SessionUser): Promise<Omit<HomeContext, 'avatar_url' | 'cover_url'>> {
   const db = createAdminClient();
-  const [profile, record, requests, calls, opportunities, posts] = await Promise.all([
+  const [profile, record, requests, calls, opportunities, posts, connections, invitations, suggestions] = await Promise.all([
     getAlumniProfile(user.id),
     getAlumniRecordForUser(user.id),
     db.from('requests').select('student_id, status').eq('alumni_id', user.id),
     listCallsForUser(user.id),
     openOpportunities(),
     countPostsBy(user.id),
+    countConnections(user.id),
+    countPendingInvitations(user.id),
+    peopleYouMayKnow(user.id, 4),
   ]);
   const received = requests.data ?? [];
   const work = [profile?.designation, profile?.current_company?.name].filter(Boolean).join(' at ');
@@ -161,20 +173,34 @@ async function alumniContext(user: SessionUser): Promise<HomeContext> {
     profileHref: '/alumni/profile',
     profileStrength: profileStrength(profile, ['current_company_id', 'designation', 'industry', 'location', 'experience_years', 'skills', 'bio']),
     stats: [
+      { label: 'Connections', value: connections, href: '/alumni/network?tab=connections' },
+      { label: 'Invitations', value: invitations, href: '/alumni/network' },
       { label: 'Pending requests', value: received.filter((r: any) => r.status === 'pending').length, href: '/alumni/requests' },
-      { label: 'Mentees', value: new Set(received.filter((r: any) => r.status === 'accepted').map((r: any) => r.student_id)).size, href: '/alumni/mentees' },
       { label: 'Your posts', value: posts, href: '/alumni/home?mine=1' },
     ],
     people: {
-      title: 'Alumni from your years',
-      items: await nearbyAlumni(user.id, record?.branch ?? null, record?.batch_year ?? null, (r) => `/alumni/people/${r.user_id}`),
-      moreHref: '/alumni/suggestions',
+      title: 'People you may know',
+      items: suggestions.map((p) => ({
+        key: p.id,
+        name: p.full_name,
+        detail: p.headline,
+        href: `/alumni/people/${p.id}`,
+        note: null,
+        connectId: p.id,
+        avatar_url: p.avatar_url,
+      })),
+      moreHref: '/alumni/network',
     },
     opportunities,
     nextSession: upcomingOf(calls)[0] ?? null,
   };
 }
 
-export function getHomeContext(user: SessionUser): Promise<HomeContext> {
-  return user.role === 'alumni' ? alumniContext(user) : studentContext(user);
+export async function getHomeContext(user: SessionUser): Promise<HomeContext> {
+  const db = createAdminClient();
+  const [context, { data: photos }] = await Promise.all([
+    user.role === 'alumni' ? alumniContext(user) : studentContext(user),
+    db.from('users').select('avatar_path, cover_path').eq('id', user.id).maybeSingle(),
+  ]);
+  return { ...context, avatar_url: avatarUrl(photos?.avatar_path), cover_url: avatarUrl(photos?.cover_path) };
 }

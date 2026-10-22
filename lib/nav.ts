@@ -7,7 +7,6 @@ import {
   BarChart3,
   Briefcase,
   ClipboardCheck,
-  Sparkles,
   Wand2,
   Settings,
   HelpCircle,
@@ -16,6 +15,7 @@ import {
   Building2,
   Video,
   MessageSquare,
+  Network,
   UserCircle,
   FileText,
   Database,
@@ -34,7 +34,9 @@ export type NavItem = {
     | 'verificationQueue'
     | 'upcomingCalls'
     | 'openOpportunities'
-    | 'unreadMessages';
+    | 'unreadMessages'
+    | 'pendingInvitations'
+    | 'unreadNotifications';
   badgeLabel?: string;
 };
 
@@ -52,7 +54,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: 'Workspace',
       items: [
         { label: 'Home', href: '/student/home', icon: Home },
-        { label: 'Dashboard', href: '/student', icon: LayoutDashboard, exact: true },
+        { label: 'My Network', href: '/student/network', icon: Network, badgeKey: 'pendingInvitations' },
         { label: 'Alumni Directory', href: '/student/directory', icon: Users },
         { label: 'My Requests', href: '/student/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/student/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
@@ -66,7 +68,6 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: 'Career tools',
       items: [
         { label: 'Readiness Check', href: '/student/assistant', icon: ClipboardCheck, badgeLabel: 'New' },
-        { label: 'Outreach Composer', href: '/student/composer', icon: Sparkles },
         { label: 'Smart Matches', href: '/student/suggestions', icon: Wand2 },
       ],
     },
@@ -85,7 +86,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: 'Workspace',
       items: [
         { label: 'Home', href: '/alumni/home', icon: Home },
-        { label: 'Dashboard', href: '/alumni', icon: LayoutDashboard, exact: true },
+        { label: 'My Network', href: '/alumni/network', icon: Network, badgeKey: 'pendingInvitations' },
         { label: 'Request Inbox', href: '/alumni/requests', icon: Inbox, badgeKey: 'pendingRequests' },
         { label: 'Messages', href: '/alumni/messages', icon: MessageSquare, badgeKey: 'unreadMessages' },
         { label: 'My Mentees', href: '/alumni/mentees', icon: Users },
@@ -99,7 +100,6 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: 'Giving back',
       items: [
         { label: 'Inbox Triage', href: '/alumni/assistant', icon: ClipboardCheck, badgeLabel: 'New' },
-        { label: 'Posting Composer', href: '/alumni/composer', icon: Sparkles },
         { label: 'Students to Help', href: '/alumni/suggestions', icon: Wand2 },
       ],
     },
