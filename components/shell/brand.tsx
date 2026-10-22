@@ -10,7 +10,7 @@ export function BrandMark({ className }: { className?: string }) {
       )}
       style={{ backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))' }}
     >
-      SJ
+      AB
     </span>
   );
 }
@@ -28,7 +28,7 @@ export function Brand({
     <Link href={href} className={cn('flex items-center gap-2.5', className)}>
       <BrandMark />
       <span className="flex min-w-0 flex-col leading-none">
-        <span className="font-display text-[15px] text-foreground">SJCEM Network</span>
+        <span className="font-display text-[15px] text-foreground">AlumniBridge</span>
         {subtitle ? (
           <span className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             {subtitle}

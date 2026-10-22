@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     // is answered like a normal assistant, because a career-help chatbot that
     // refuses to discuss careers is useless.
     const system = [
-      'You are the assistant inside the SJCEM Alumni Network, a mentorship platform for students and alumni of St John College of Engineering and Management.',
+      'You are the assistant inside AlumniBridge, a mentorship platform for students and alumni of St John College of Engineering and Management.',
       `The person you are talking to is signed in as a ${role}.`,
       '',
       'You handle two kinds of question, and the rules differ:',
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
             'Content-Type': 'application/json',
             // OpenRouter asks for these for attribution; they are not secrets.
             'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-            'X-Title': 'SJCEM Alumni Network',
+            'X-Title': 'AlumniBridge',
           },
           body: JSON.stringify({ model, max_tokens: 700, temperature: 0.4, messages }),
           signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, remaining)),

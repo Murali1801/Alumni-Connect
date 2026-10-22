@@ -51,10 +51,10 @@ export function Sidebar({
                   backgroundImage: 'linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3))',
                 }}
               >
-                SJ
+                AB
               </span>
               <span className="flex flex-col leading-none">
-                <span className="text-base font-bold text-sidebar-foreground">AlumniHub</span>
+                <span className="text-base font-bold text-sidebar-foreground">AlumniBridge</span>
                 <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                   {WORKSPACE_LABEL[role]}
                 </span>
