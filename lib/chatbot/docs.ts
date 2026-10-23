@@ -250,7 +250,7 @@ export const PRODUCT_DOCS: KnowledgeDoc[] = [
     roles: [],
     keywords: ['assistant', 'chatbot', 'bot', 'ai', 'help bot', 'what can you see', 'sources', 'citations'],
     body:
-      'The assistant answers from this knowledge base, from open listings and recent posts on the network, and from your own account: your profile, your requests and their statuses, and your upcoming sessions. It numbers its sources like [1] so you can open and check them. It cannot read your messages or anyone else’s private data, and it cannot take actions for you: it tells you which page does. General career questions (interview preparation, choosing a direction) it answers from general knowledge.',
+      'The assistant answers from this knowledge base, from open listings and recent posts on the network, and from your own account: your profile, your requests and their statuses, and your upcoming sessions. It numbers its sources like [1] so you can open and check them. It cannot read your messages or anyone else’s private data, and it cannot take actions for you: it tells you which page does. Any other question, from interview preparation and choosing a direction to studies and technology, it answers from general knowledge.',
   },
   {
     id: 'guide-career-tools',
