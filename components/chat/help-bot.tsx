@@ -20,7 +20,7 @@ type Turn = {
 };
 
 const GREETING =
-  'Ask me anything — how this platform works, or the wider things around it: interview preparation, choosing a direction, what to put in an outreach message. For questions about the platform itself I answer from its own documentation, and I will say so when something is outside what I know.';
+  'Ask me anything: how this platform works, interview preparation, choosing a direction, your studies, or anything else. For questions about the platform itself I answer from its own documentation and cite it, and I will say so when something is outside what I know.';
 
 export function HelpBot({ role }: { role: Role }) {
   const suggestions = SUGGESTED_QUESTIONS[role];
@@ -124,7 +124,7 @@ export function HelpBot({ role }: { role: Role }) {
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-semibold text-foreground">Platform help</h2>
               <p className="truncate text-[11px] text-muted-foreground">
-                Platform questions and general career help
+                Platform questions and anything else
               </p>
             </div>
             {turns.length > 0 && (

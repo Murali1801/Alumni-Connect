@@ -38,35 +38,48 @@ const askSchema = z.object({
 });
 
 /**
- * Models to try, in order, when an OpenRouter key is configured.
+ * Who writes the answer, in order: Groq first (fast, an answer in about a
+ * second), then OpenRouter's free models if a key for it is set. Each model is
+ * tried in turn and the first that answers wins; if all of them fail, the
+ * retrieved sources still answer on their own.
  *
- * OpenRouter's free tier rate-limits hard and unpredictably — in testing three
- * of four candidates returned 429 within the same second — so a single model is
- * not dependable. Each is tried in turn and the first that answers wins; if all
- * of them fail the retrieved sources still answer.
- *
- * Override with a comma-separated OPENROUTER_MODEL. Free slugs also come and go
- * (the one this shipped with stopped being free), so check
- * https://openrouter.ai/models?max_price=0 if every model starts failing.
+ * Both speak the OpenAI chat-completions format. Override the models with a
+ * comma-separated GROQ_MODEL or OPENROUTER_MODEL; check
+ * https://console.groq.com/docs/models if Groq retires one.
  */
-const MODELS = (
-  process.env.OPENROUTER_MODEL ??
-  'minimax/minimax-m2.7:free,google/gemma-4-31b-it:free,z-ai/glm-5.2:free,nvidia/nemotron-3-super-120b-a12b:free'
-)
-  .split(',')
-  .map((m) => m.trim())
-  .filter(Boolean);
+type Provider = { name: string; url: string; key: string | undefined; models: string[]; headers?: Record<string, string> };
+
+const list = (value: string) => value.split(',').map((m) => m.trim()).filter(Boolean);
+
+function providers(): Provider[] {
+  return [
+    {
+      name: 'groq',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      key: process.env.GROQ_API_KEY,
+      models: list(process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b,qwen/qwen3.8-27b,openai/gpt-oss-20b'),
+    },
+    {
+      name: 'openrouter',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      key: process.env.OPENROUTER_API_KEY,
+      models: list(process.env.OPENROUTER_MODEL ?? 'google/gemma-4-31b-it:free,nvidia/nemotron-3-super-120b-a12b:free'),
+      // OpenRouter asks for these for attribution; they are not secrets.
+      headers: { 'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000', 'X-Title': 'AlumniBridge' },
+    },
+  ].filter((p) => p.key && p.models.length);
+}
 
 /**
- * Per-model budget, and a hard ceiling across all attempts.
- *
- * Free models are slow — 10 to 30 seconds is normal — and a serverless function
- * that runs past its platform limit is killed with no response at all. Stopping
- * ourselves at 40s means the offline answer still gets returned instead.
+ * Per-model budget, and a hard ceiling across all attempts. Groq answers in a
+ * second or two; OpenRouter's free models can take 10 to 30. A serverless
+ * function that runs past its platform limit is killed with no response at
+ * all, so stopping ourselves at 40s means the offline answer still gets out.
  */
 const MODEL_TIMEOUT_MS = 14_000;
 const TOTAL_BUDGET_MS = 40_000;
-const MAX_ANSWER_TOKENS = 700;
+// Reasoning models spend part of this thinking before they write.
+const MAX_ANSWER_TOKENS = 1_200;
 
 export async function POST(request: Request) {
   const auth = await requireApiUser();
@@ -88,8 +101,8 @@ export async function POST(request: Request) {
   const chosen = selectBlocks(blocks);
   const offline = () => NextResponse.json({ ...offlineAnswer(blocks, user.role), mode: 'offline' as const });
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return offline();
+  const writers = providers();
+  if (!writers.length) return offline();
 
   const system = buildSystemPrompt({
     role: user.role,
@@ -100,46 +113,42 @@ export async function POST(request: Request) {
   const messages = buildMessages(system, body.history, body.question);
   const deadline = started + TOTAL_BUDGET_MS;
 
-  for (const model of MODELS) {
-    // Do not start an attempt we cannot finish inside the budget.
-    const remaining = deadline - Date.now();
-    if (remaining < 4_000) {
-      console.warn('assistant: out of time budget, answering from the sources');
-      break;
-    }
-
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          // OpenRouter asks for these for attribution; they are not secrets.
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-          'X-Title': 'AlumniBridge',
-        },
-        body: JSON.stringify({ model, max_tokens: MAX_ANSWER_TOKENS, temperature: 0.3, messages }),
-        signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, remaining)),
-      });
-
-      if (!res.ok) {
-        // 429 is routine on the free tier; 404 means the slug stopped being
-        // free. Either way the next model may still answer.
-        console.warn(`assistant: ${model} returned ${res.status}, trying the next model`);
-        continue;
+  for (const provider of writers) {
+    for (const model of provider.models) {
+      // Do not start an attempt we cannot finish inside the budget.
+      const remaining = deadline - Date.now();
+      if (remaining < 4_000) {
+        console.warn('assistant: out of time budget, answering from the sources');
+        return offline();
       }
 
-      const data = await res.json();
-      const raw: string | undefined = data?.choices?.[0]?.message?.content?.trim();
-      if (!raw) {
-        console.warn(`assistant: ${model} returned an empty answer, trying the next model`);
-        continue;
-      }
+      try {
+        const res = await fetch(provider.url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${provider.key}`, 'Content-Type': 'application/json', ...provider.headers },
+          body: JSON.stringify({ model, max_tokens: MAX_ANSWER_TOKENS, temperature: 0.3, messages }),
+          signal: AbortSignal.timeout(Math.min(MODEL_TIMEOUT_MS, remaining)),
+        });
 
-      const { answer, sources } = citedSources(raw, chosen);
-      return NextResponse.json({ answer, sources, mode: 'llm' as const, model });
-    } catch (err) {
-      console.warn(`assistant: ${model} failed (${(err as Error).message}), trying the next model`);
+        if (!res.ok) {
+          // 429 is a rate limit; 404 means the model was retired. Either way
+          // the next model may still answer.
+          console.warn(`assistant: ${provider.name} ${model} returned ${res.status}, trying the next model`);
+          continue;
+        }
+
+        const data = await res.json();
+        const raw: string | undefined = data?.choices?.[0]?.message?.content?.trim();
+        if (!raw) {
+          console.warn(`assistant: ${provider.name} ${model} returned an empty answer, trying the next model`);
+          continue;
+        }
+
+        const { answer, sources } = citedSources(raw, chosen);
+        return NextResponse.json({ answer, sources, mode: 'llm' as const, model });
+      } catch (err) {
+        console.warn(`assistant: ${provider.name} ${model} failed (${(err as Error).message}), trying the next model`);
+      }
     }
   }
 

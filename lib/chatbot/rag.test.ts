@@ -15,6 +15,7 @@ import {
   peopleQuery,
   postQuery,
   offlineAnswer,
+  plainText,
   rankDocsLocal,
   rankedBlocks,
   resolveUrl,
@@ -230,6 +231,12 @@ function runTests() {
   const off3 = offlineAnswer([block('weak', 0.25)], 'alumni');
   assert.ok(off3.answer.startsWith('I do not have a documented answer'));
   assert.deepStrictEqual(off3.sources, [{ n: 1, title: 'Help', url: '/alumni/help', kind: 'doc' }]);
+
+  /* model Markdown comes out as plain text */
+  assert.strictEqual(
+    plainText('**Company (35 %)** is first\n* second item\n## Heading\n• third'),
+    'Company (35 %) is first\n- second item\nHeading\n- third'
+  );
 
   console.log('All rag tests passed!');
 }
