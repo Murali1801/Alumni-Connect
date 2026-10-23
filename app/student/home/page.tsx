@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export default async function StudentHomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ before?: string; mine?: string }>;
+  searchParams: Promise<{ before?: string; mine?: string; show?: string; tag?: string; sort?: string }>;
 }) {
   const user = await requireUser(['student']);
   return <HomePage user={user} basePath="/student/home" searchParams={await searchParams} />;

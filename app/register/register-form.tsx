@@ -69,7 +69,7 @@ export function RegisterForm() {
       });
       if (error) {
         toast.success('Account created. Please sign in.');
-        router.push('/');
+        router.push('/login');
         return;
       }
 

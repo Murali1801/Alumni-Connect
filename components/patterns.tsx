@@ -217,7 +217,7 @@ export function InitialsAvatar({
     <span
       aria-hidden
       className={cn(
-        'inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold ring-1 ring-inset ring-foreground/10',
+        'inline-flex shrink-0 select-none items-center justify-center rounded-[30%] font-semibold ring-1 ring-inset ring-foreground/10',
         AVATAR_SIZES[size],
         className
       )}
@@ -228,6 +228,30 @@ export function InitialsAvatar({
     >
       {initialsOf(name)}
     </span>
+  );
+}
+
+/** A member's photo when they have uploaded one, otherwise their initials. */
+export function MemberAvatar({
+  name,
+  url,
+  size = 'md',
+  className,
+}: {
+  name: string;
+  url?: string | null;
+  size?: keyof typeof AVATAR_SIZES;
+  className?: string;
+}) {
+  if (!url) return <InitialsAvatar name={name} size={size} className={className} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className={cn('shrink-0 rounded-[30%] object-cover ring-1 ring-inset ring-foreground/10', AVATAR_SIZES[size], className)}
+    />
   );
 }
 

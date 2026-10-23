@@ -45,17 +45,17 @@ function rnd() {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-// The kinds seed-synthetic-posts.mjs writes, recognised from their wording.
+// The kinds seed-synthetic-posts.mjs writes: openings carry a listing; the
+// rest are recognised from their wording.
 const KIND_OF = [
-  ['hiring', /hiring|openings for interns|Referral window|campus drive/i],
-  ['career', /new role|been promoted|Wrapped up my time|Completed \d+ years/i],
-  ['learning', /Just cleared|went deep|Gave a talk|Reading list/i],
-  ['project', /just shipped|Weekend project|empty plot|migrating a legacy/i],
-  ['campus', /Visited the SJCEM campus|Shoutout to the|Class of \d{4}, where|Met three SJCEM/i],
-  ['question', /^Question for the network|^Alumni in |^What do you think/i],
+  ['career', /new role|Completed \d+ years/i],
+  ['learning', /went deep/i],
+  ['campus', /Visited the SJCEM campus|Class of \d{4}, where/i],
   ['advice', /.*/],
 ];
-const kindOf = (body) => KIND_OF.find(([, re]) => re.test(body))[0];
+const kindOf = (post) => (post.opportunity_id ? 'opening' : KIND_OF.find(([, re]) => re.test(post.body))[0]);
+// Manifest kinds from photo prompts: workplace and project scenes now illustrate openings.
+const PHOTO_KIND = { hiring: 'opening', project: 'opening', career: 'career', learning: 'learning', campus: 'campus', advice: 'advice' };
 
 const chunks = (arr, n = 100) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
@@ -85,7 +85,7 @@ async function main() {
   for (const part of chunks([...branchOf.keys()])) {
     const { data, error } = await db
       .from('posts')
-      .select('id, author_id, body, image_path, created_at')
+      .select('id, author_id, body, image_path, created_at, opportunity_id, repost_of')
       .in('author_id', part)
       .is('image_path', null);
     if (error) throw new Error(error.message);
@@ -93,7 +93,7 @@ async function main() {
   }
   // Newest first; candidates come from the newest 250 so photos sit near the top.
   posts.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const all = posts.map((p) => ({ ...p, kind: kindOf(p.body), branch: branchOf.get(p.author_id) }));
+  const all = posts.filter((p) => !p.repost_of).map((p) => ({ ...p, kind: kindOf(p), branch: branchOf.get(p.author_id) }));
   const pool = all.slice(0, 250);
   console.log(`${posts.length} synthetic posts without a photo; choosing from the newest ${pool.length}.`);
 
@@ -102,12 +102,14 @@ async function main() {
   for (const photo of photos) {
     // `text` (a regex) keeps a topic photo, such as a construction site, on posts about that topic.
     const about = photo.text ? new RegExp(photo.text, 'i') : null;
-    const open = (p) => !used.has(p.id) && p.kind === photo.kind && (!about || about.test(p.body));
+    const want = PHOTO_KIND[photo.kind] ?? photo.kind;
+    // Openings are matched by branch, so the topic text is not required there.
+    const open = (p) => !used.has(p.id) && p.kind === want && (!about || p.kind === 'opening' || about.test(p.body));
     const fits = pool.filter((p) => open(p) && (!photo.branch || photo.branch.includes(p.branch)));
     // Fall back to any branch, then to older posts, before giving up on a photo.
     const loose = fits.length ? fits : pool.some(open) ? pool.filter(open) : all.filter(open);
     if (!loose.length) {
-      console.log(`  ${photo.file}: no ${photo.kind} post left, skipped`);
+      console.log(`  ${photo.file}: no ${want} post left, skipped`);
       continue;
     }
     const post = loose[Math.floor(rnd() * loose.length)];

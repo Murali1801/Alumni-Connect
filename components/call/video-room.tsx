@@ -78,6 +78,14 @@ export type VideoRoomProps = {
   scheduledAt: string;
   durationMin: number;
   agenda?: string | null;
+  /** Fill the parent instead of the viewport, for a room embedded in another page. */
+  fill?: boolean;
+  /** See `CallRoomOptions.persistChat`. */
+  persistChat?: boolean;
+  /** Told about the camera stream and whether the camera is on, as they change. */
+  onLocalMedia?: (stream: MediaStream | null, camOn: boolean) => void;
+  /** Called once when this person leaves the call. */
+  onEnded?: () => void;
 };
 
 export function VideoRoom({
@@ -93,8 +101,12 @@ export function VideoRoom({
   scheduledAt,
   durationMin,
   agenda,
+  fill = false,
+  persistChat = true,
+  onLocalMedia,
+  onEnded,
 }: VideoRoomProps) {
-  const call = useCallRoom({ roomId, selfId, selfName, hostId, guestId });
+  const call = useCallRoom({ roomId, selfId, selfName, hostId, guestId, persistChat });
   const {
     phase,
     errorText,
@@ -112,7 +124,24 @@ export function VideoRoom({
     micId,
     messages,
     diag,
+    cameraStream,
   } = call;
+
+  const height = fill ? 'h-full' : 'h-dvh';
+
+  // Refs, so a caller passing inline callbacks does not re-run these effects.
+  const onLocalMediaRef = React.useRef(onLocalMedia);
+  const onEndedRef = React.useRef(onEnded);
+  React.useEffect(() => {
+    onLocalMediaRef.current = onLocalMedia;
+    onEndedRef.current = onEnded;
+  });
+  React.useEffect(() => {
+    onLocalMediaRef.current?.(cameraStream, camOn);
+  }, [cameraStream, camOn]);
+  React.useEffect(() => {
+    if (phase === 'ended') onEndedRef.current?.();
+  }, [phase]);
 
   const localVideo = React.useRef<HTMLVideoElement>(null);
   const [panel, setPanel] = React.useState<'chat' | 'people' | null>(null);
@@ -179,6 +208,7 @@ export function VideoRoom({
         body={`${title} · ${elapsed > 0 ? `lasted ${clock}` : 'no media was exchanged'}`}
         backHref={backHref}
         rejoin
+        height={height}
       />
     );
   }
@@ -190,6 +220,7 @@ export function VideoRoom({
         heading="Not admitted"
         body={`${hostName} did not let you into this session. If that was a mistake, ask them to send the link again.`}
         backHref={backHref}
+        height={height}
       />
     );
   }
@@ -198,7 +229,7 @@ export function VideoRoom({
 
   if (!admitted) {
     return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-6 bg-background px-6 text-center">
+      <div className={cn('flex flex-col items-center justify-center gap-6 bg-background px-6 text-center', height)}>
         <div className="w-full max-w-sm overflow-hidden rounded-xl bg-muted ring-1 ring-border">
           <video ref={localVideo} autoPlay playsInline muted className="aspect-video w-full object-cover" />
         </div>
@@ -229,7 +260,7 @@ export function VideoRoom({
   /* ---------------- room ---------------- */
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className={cn('flex flex-col overflow-hidden bg-background text-foreground', height)}>
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-sm font-semibold">{title}</h1>
@@ -626,15 +657,17 @@ function Centred({
   body,
   backHref,
   rejoin,
+  height = 'h-dvh',
 }: {
   icon: React.ReactNode;
   heading: string;
   body: string;
   backHref: string;
   rejoin?: boolean;
+  height?: string;
 }) {
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+    <div className={cn('flex flex-col items-center justify-center gap-4 bg-background px-6 text-center', height)}>
       <div className="flex size-14 items-center justify-center rounded-full bg-muted">{icon}</div>
       <div className="space-y-1">
         <h1 className="font-display text-2xl">{heading}</h1>

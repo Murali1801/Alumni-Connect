@@ -44,7 +44,7 @@ export function ClaimForm({ token, name }: { token: string; name: string }) {
       });
       if (error) {
         toast.success('Account created. Please sign in.');
-        router.push('/');
+        router.push('/login');
         return;
       }
 

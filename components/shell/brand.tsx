@@ -1,15 +1,26 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
+/**
+ * The AlumniBridge mark: two people joined by a bridge, alumni and students
+ * meeting. Designed with ChatGPT; solid brand blue, no gradients. The same image
+ * is app/icon.png (favicon) and public/brand/logo-mark.png (large uses).
+ */
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        'inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-bold bg-primary text-primary-foreground',
-        className
-      )}
-    >
-      AB
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/brand/logo-mark-192.png" alt="AlumniBridge" width={32} height={32} className={cn('size-8 shrink-0', className)} />
+  );
+}
+
+/** The mark with the two-tone wordmark, for headers and the sign-in pages. */
+export function Wordmark({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' }) {
+  return (
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <BrandMark className={size === 'sm' ? 'size-7' : 'size-8'} />
+      <span className={cn('font-bold tracking-tight text-foreground', size === 'sm' ? 'text-base' : 'text-lg')}>
+        Alumni<span className="text-primary">Bridge</span>
+      </span>
     </span>
   );
 }

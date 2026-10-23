@@ -1,12 +1,15 @@
 import Link from 'next/link';
-import { Briefcase, MapPin, ExternalLink, Building2, CalendarDays } from 'lucide-react';
+import { Briefcase, MapPin, ExternalLink, Building2, CalendarDays, GraduationCap, Send, Users, Wallet, CalendarClock } from 'lucide-react';
+import { OPPORTUNITY_LABEL, WORK_MODE_LABEL } from '@/lib/feed-shared';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InitialsAvatar, EmptyState } from '@/components/patterns';
 import type { OpportunityRow } from '@/lib/queries';
-import { formatDayMonth } from '@/lib/format';
+import { formatDate, formatDayMonth } from '@/lib/format';
+
+const KIND_ICON = { job: Briefcase, internship: GraduationCap, placement: Users, referral: Send } as const;
 
 /** Skills the viewer already has, so the card can mark the overlap. */
 export type SkillMatch = { have: Set<string> } | null;
@@ -41,23 +44,19 @@ export function OpportunityList({
           ? (o.target_skills ?? []).filter((s) => skills.have.has(s.toLowerCase())).length
           : 0;
         const total = (o.target_skills ?? []).length;
+        const Icon = KIND_ICON[o.type] ?? Briefcase;
 
         return (
           <Card key={o.id} className="gap-0 p-5">
             <div className="flex items-start gap-3">
-              <div
-                className={cn(
-                  'flex size-10 shrink-0 items-center justify-center rounded-lg text-lg',
-                  o.type === 'internship' ? 'bg-chart-2/15' : 'bg-primary/10'
-                )}
-              >
-                {o.type === 'internship' ? '🎓' : '💼'}
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold text-foreground">{o.title}</h3>
-                  <Badge variant="secondary" className="font-normal capitalize">
-                    {o.type}
+                  <Badge variant="secondary" className="font-normal">
+                    {OPPORTUNITY_LABEL[o.type] ?? o.type}
                   </Badge>
                   {showStatus && (
                     <Badge variant={o.is_open ? 'outline' : 'ghost'} className="font-normal">
@@ -72,8 +71,26 @@ export function OpportunityList({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="size-3" />
-                    {o.location ?? 'Location not stated'}
+                    {[o.location ?? 'Location not stated', o.work_mode && WORK_MODE_LABEL[o.work_mode]].filter(Boolean).join(' · ')}
                   </span>
+                  {o.compensation && (
+                    <span className="inline-flex items-center gap-1">
+                      <Wallet className="size-3" />
+                      {o.compensation}
+                    </span>
+                  )}
+                  {o.experience && (
+                    <span className="inline-flex items-center gap-1">
+                      <Briefcase className="size-3" />
+                      {o.experience}
+                    </span>
+                  )}
+                  {o.deadline && (
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarClock className="size-3" />
+                      Apply by {formatDate(o.deadline)}
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="size-3" />
                     {formatDayMonth(o.created_at)}

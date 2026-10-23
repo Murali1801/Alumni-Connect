@@ -6,7 +6,8 @@
  *   - the auth user behind each, which cascades to its users row and to any
  *     requests, opportunities, posts, likes, comments and engagement events
  *     involving it
- *   - the photos those accounts' posts stored in the post-images bucket
+ *   - the photos those accounts' posts stored in the post-images bucket, and
+ *     their profile photos and banners in the avatars bucket
  *   - audit_log rows those accounts wrote (that table does not cascade)
  *
  *   node scripts/purge-synthetic-alumni.mjs           # dry run, prints the plan
@@ -65,6 +66,15 @@ async function main() {
     return;
   }
 
+  // Profile photos and banners, likewise only rows: remove the files first.
+  for (const ids of chunks(userIds, 100)) {
+    const { data: users } = await db.from('users').select('avatar_path, cover_path').in('id', ids);
+    const paths = (users ?? []).flatMap((u) => [u.avatar_path, u.cover_path]).filter(Boolean);
+    if (paths.length) {
+      const { error } = await db.storage.from('avatars').remove(paths);
+      if (error) throw new Error(`avatars: ${error.message}`);
+    }
+  }
   // Post photos: their rows cascade with the accounts, but the stored files do not.
   for (const ids of chunks(userIds, 100)) {
     const { data: withPhotos } = await db.from('posts').select('image_path').in('author_id', ids).not('image_path', 'is', null);

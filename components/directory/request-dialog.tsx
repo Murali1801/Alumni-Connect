@@ -29,16 +29,22 @@ export function RequestDialog({
   alumniName,
   matchScore,
   types,
+  initialType,
+  initialMessage,
 }: {
   alumniUserId: string;
   alumniName: string;
   matchScore: number;
   types: RequestType[];
+  /** Open straight away on this type, e.g. a referral asked for from a job post. */
+  initialType?: string;
+  initialMessage?: string;
 }) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
-  const [type, setType] = React.useState(types.find((t) => t.existing !== 'pending')?.value ?? types[0].value);
-  const [message, setMessage] = React.useState('');
+  const preset = initialType ? types.find((t) => t.value === initialType && t.existing !== 'pending') : undefined;
+  const [open, setOpen] = React.useState(Boolean(preset));
+  const [type, setType] = React.useState(preset?.value ?? types.find((t) => t.existing !== 'pending')?.value ?? types[0].value);
+  const [message, setMessage] = React.useState(preset ? (initialMessage ?? '') : '');
   const [sending, setSending] = React.useState(false);
 
   const selected = types.find((t) => t.value === type);

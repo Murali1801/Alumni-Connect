@@ -131,13 +131,18 @@ export type CallRoomOptions = {
   selfName: string;
   hostId: string;
   guestId: string;
+  /**
+   * Save chat lines to the pair's Messages thread and load its history. Off for
+   * rooms whose two people may not share a thread, such as interview rounds.
+   */
+  persistChat?: boolean;
 };
 
-export function useCallRoom({ roomId, selfId, selfName, hostId, guestId }: CallRoomOptions) {
+export function useCallRoom({ roomId, selfId, selfName, hostId, guestId, persistChat = true }: CallRoomOptions) {
   const isHost = selfId === hostId;
   const isMember = selfId === hostId || selfId === guestId;
   /** The scheduled counterpart, for the chat thread that outlives the room. */
-  const counterpartId = selfId === hostId ? guestId : selfId === guestId ? hostId : null;
+  const counterpartId = !persistChat ? null : selfId === hostId ? guestId : selfId === guestId ? hostId : null;
 
   const peersRef = React.useRef(new Map<string, Peer>());
   const channelRef = React.useRef<RealtimeChannel | null>(null);
@@ -162,6 +167,8 @@ export function useCallRoom({ roomId, selfId, selfName, hostId, guestId }: CallR
   const [knockers, setKnockers] = React.useState<Knocker[]>([]);
   const [admitted, setAdmitted] = React.useState(isMember);
   const [localPreview, setLocalPreview] = React.useState<MediaStream | null>(null);
+  /** The camera and microphone stream, unaffected by screen sharing. */
+  const [cameraStream, setCameraStream] = React.useState<MediaStream | null>(null);
   const [micOn, setMicOn] = React.useState(true);
   const [camOn, setCamOn] = React.useState(true);
   const [sharing, setSharing] = React.useState(false);
@@ -438,6 +445,7 @@ export function useCallRoom({ roomId, selfId, selfName, hostId, guestId }: CallR
       localStreamRef.current = stream;
       cameraTrackRef.current = stream.getVideoTracks()[0] ?? null;
       setLocalPreview(stream);
+      setCameraStream(stream);
 
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
@@ -841,6 +849,7 @@ export function useCallRoom({ roomId, selfId, selfName, hostId, guestId }: CallR
     levelRafRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
+    setCameraStream(null);
     setStatus('ended');
   }, [selfId, send]);
 
@@ -853,6 +862,7 @@ export function useCallRoom({ roomId, selfId, selfName, hostId, guestId }: CallR
     isHost,
     isMember,
     localPreview,
+    cameraStream,
     micOn,
     camOn,
     sharing,
