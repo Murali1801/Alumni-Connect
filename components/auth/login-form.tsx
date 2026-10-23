@@ -3,20 +3,18 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, GraduationCap, Users, ShieldCheck } from 'lucide-react';
+import { Loader2, Users, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+// The server signs in to these (app/api/auth/demo), so no password ships here.
 const DEMO_ACCOUNTS = [
-  { label: 'Student', email: 'student1@v3.demo.com', icon: GraduationCap },
-  { label: 'Alumnus', email: 'alumni1@v3.demo.com', icon: Users },
-  { label: 'Admin', email: 'admin@v3.demo.com', icon: ShieldCheck },
-];
-
-const DEMO_PASSWORD = 'password123';
+  { label: 'Alumnus', account: 'alumni', icon: Users },
+  { label: 'Admin', account: 'admin', icon: ShieldCheck },
+] as const;
 
 /** `next`: an in-app link to return to after sign-in, already checked by safeNext. */
 export function LoginForm({ next }: { next?: string | null }) {
@@ -24,6 +22,13 @@ export function LoginForm({ next }: { next?: string | null }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // The server decides where each role lands; /auth/route reads the role and
+  // redirects, so the client does not need to know the mapping.
+  function goHome() {
+    router.push(next ? `/auth/route?next=${encodeURIComponent(next)}` : '/auth/route');
+    router.refresh();
+  }
 
   async function signIn(withEmail: string, withPassword: string) {
     setLoading(true);
@@ -38,11 +43,23 @@ export function LoginForm({ next }: { next?: string | null }) {
       setLoading(false);
       return;
     }
+    goHome();
+  }
 
-    // The server decides where each role lands; /auth/route reads the role and
-    // redirects, so the client does not need to know the mapping.
-    router.push(next ? `/auth/route?next=${encodeURIComponent(next)}` : '/auth/route');
-    router.refresh();
+  async function signInDemo(account: (typeof DEMO_ACCOUNTS)[number]['account']) {
+    setLoading(true);
+    const res = await fetch('/api/auth/demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => null);
+      toast.error(body?.error ?? 'Could not sign in to the demo account.');
+      setLoading(false);
+      return;
+    }
+    goHome();
   }
 
   return (
@@ -105,18 +122,14 @@ export function LoginForm({ next }: { next?: string | null }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {DEMO_ACCOUNTS.map((a) => (
           <Button
-            key={a.email}
+            key={a.account}
             type="button"
             variant="outline"
             disabled={loading}
-            onClick={() => {
-              setEmail(a.email);
-              setPassword(DEMO_PASSWORD);
-              void signIn(a.email, DEMO_PASSWORD);
-            }}
+            onClick={() => void signInDemo(a.account)}
             className="h-auto flex-col gap-1.5 px-2 py-3"
           >
             <a.icon className="size-4" />

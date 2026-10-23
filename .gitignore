@@ -58,3 +58,6 @@ next-env.d.ts
 dbcheck*.mjs
 sweep.mjs
 audit-synth*.mjs
+
+# local-only files (login lists and the like)
+/private/
